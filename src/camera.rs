@@ -21,7 +21,8 @@ pub struct Camera {
     pub velocity: Vector3<f32>,
     pub accel: f32,
     pub damping: f32,
-    pub sensitivity: f32,
+    pub mouse_sens: f32,
+    pub scroll_sens: f32,
 }
 
 impl Camera {
@@ -31,7 +32,8 @@ impl Camera {
         pitch: P,
         accel: f32,
         damping: f32,
-        sensitivity: f32,
+        mouse_sens: f32,
+        scroll_sens: f32,
     ) -> Self
     where
         V: Into<Point3<f32>>,
@@ -45,7 +47,8 @@ impl Camera {
             velocity: Vector3::zero(),
             accel,
             damping,
-            sensitivity,
+            mouse_sens,
+            scroll_sens,
         }
     }
 
@@ -120,7 +123,7 @@ impl CameraInput {
             KeyCode::KeyD | KeyCode::ArrowRight => self.right = pressed,
             KeyCode::Space => self.up = pressed,
             KeyCode::ShiftLeft => self.down = pressed,
-            _ => return false
+            _ => return false,
         }
         true
     }
@@ -175,10 +178,11 @@ impl CameraController {
         let dt = dt.as_secs_f32();
 
         let dir;
-         if self.input.mouse_pressed {
-            camera.accel = (camera.accel - self.scroll * camera.sensitivity).clamp(0.0, 300.0);
+        if self.input.mouse_pressed {
+            camera.accel = (camera.accel - self.scroll * camera.scroll_sens * dt).clamp(0.0, 300.0);
             dir = self.input.movement_vector(camera);
         } else {
+            camera.position += camera.forward() * -self.scroll * camera.scroll_sens * dt;
             dir = Vector3::zero();
         }
 
@@ -186,8 +190,8 @@ impl CameraController {
         camera.velocity *= (-camera.damping * dt).exp();
         camera.position += camera.velocity * dt;
 
-        camera.yaw += Rad(-self.rot_hor) * camera.sensitivity;
-        camera.pitch += Rad(-self.rot_vert) * camera.sensitivity;
+        camera.yaw += Rad(-self.rot_hor) * camera.mouse_sens;
+        camera.pitch += Rad(-self.rot_vert) * camera.mouse_sens;
         camera.pitch = Rad(camera.pitch.0.clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2));
 
         self.reset_frame_input();

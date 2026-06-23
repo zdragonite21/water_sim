@@ -164,6 +164,7 @@ impl State {
             100.0,
             5.0,
             0.002,
+            0.3,
         );
         let projection =
             Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
