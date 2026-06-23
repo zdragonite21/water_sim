@@ -242,14 +242,14 @@ pub struct CameraRig {
     pub camera: Camera,
     pub projection: Projection,
     pub controller: CameraController,
-    pub uniform: CameraUniform,
-    pub buffer: wgpu::Buffer,
+    uniform: CameraUniform,
+    buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl CameraRig {
-    pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> Self {
+    pub fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
         let camera = Camera::new(
             (0.0, 5.0, 10.0),
             cgmath::Deg(-90.0),
@@ -259,8 +259,7 @@ impl CameraRig {
             0.002,
             0.3,
         );
-        let projection =
-            Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
+        let projection = Projection::new(width, height, cgmath::Deg(45.0), 0.1, 100.0);
         let controller = CameraController::new();
 
         let mut uniform = CameraUniform::new();
@@ -306,9 +305,15 @@ impl CameraRig {
         }
     }
 
-    pub fn update(&mut self, dt: Duration) {
+    pub fn update(&mut self, queue: &wgpu::Queue, dt: Duration) {
         self.controller.update_camera(&mut self.camera, dt);
         self.uniform
             .update_view_proj(&self.camera, &self.projection);
+
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.uniform]));
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        self.projection.resize(width, height);
     }
 }

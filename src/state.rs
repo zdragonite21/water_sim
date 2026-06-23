@@ -156,7 +156,7 @@ impl State {
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
-        let camera = CameraRig::new(&device, &config);
+        let camera = CameraRig::new(&device, config.width, config.height);
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
@@ -264,7 +264,7 @@ impl State {
         if width > 0 && height > 0 {
             self.config.width = width;
             self.config.height = height;
-            self.camera.projection.resize(width, height);
+            self.camera.resize(width, height);
             self.surface.configure(&self.device, &self.config);
             self.depth_texture =
                 Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
@@ -318,13 +318,7 @@ impl State {
     }
 
     pub fn update(&mut self, dt: instant::Duration) {
-        self.camera.update(dt);
-        
-        self.queue.write_buffer(
-            &self.camera.buffer,
-            0,
-            bytemuck::cast_slice(&[self.camera.uniform]),
-        );
+        self.camera.update(&self.queue, dt);
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {
