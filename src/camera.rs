@@ -162,9 +162,23 @@ impl CameraController {
         Self::default()
     }
 
+    pub fn set_captured(&mut self, captured: bool) {
+        self.input.mouse_pressed = captured;
+
+        if !captured {
+            self.input.clear();
+        }
+    }
+
+    pub fn is_captured(&self) -> bool {
+        self.input.mouse_pressed
+    }
+
     pub fn handle_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
-        self.rot_hor += mouse_dx as f32;
-        self.rot_vert += mouse_dy as f32;
+        if self.is_captured() {
+            self.rot_hor += mouse_dx as f32;
+            self.rot_vert += mouse_dy as f32;
+        }
     }
 
     pub fn handle_mouse_scroll(&mut self, delta: &MouseScrollDelta) {
@@ -195,10 +209,6 @@ impl CameraController {
         camera.pitch = Rad(camera.pitch.0.clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2));
 
         self.reset_frame_input();
-    }
-
-    pub fn clear_held_input(&mut self) {
-        self.input.clear();
     }
 
     fn reset_frame_input(&mut self) {

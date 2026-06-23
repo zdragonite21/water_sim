@@ -347,7 +347,7 @@ impl State {
             } => {
                 let mouse_pressed = *state == winit::event::ElementState::Pressed;
                 self.window.set_cursor_visible(!mouse_pressed);
-                self.camera_controller.input.mouse_pressed = mouse_pressed;
+                self.camera_controller.set_captured(mouse_pressed);
 
                 if mouse_pressed {
                     let _ = self
@@ -361,10 +361,9 @@ impl State {
                 true
             }
             WindowEvent::Focused(false) => {
-                self.camera_controller.input.mouse_pressed = false;
+                self.camera_controller.set_captured(false);
                 self.window.set_cursor_visible(true);
                 let _ = self.window.set_cursor_grab(CursorGrabMode::None);
-                self.camera_controller.clear_held_input();
                 true
             }
             _ => false,
