@@ -107,6 +107,7 @@ pub struct CameraInput {
     right: bool,
     up: bool,
     down: bool,
+    pub mouse_pressed: bool,
 }
 
 impl CameraInput {
@@ -170,14 +171,16 @@ impl CameraController {
         };
     }
 
-    pub fn update_camera(&mut self, camera: &mut Camera, dt: Duration, is_pressed: bool) {
+    pub fn update_camera(&mut self, camera: &mut Camera, dt: Duration) {
         let dt = dt.as_secs_f32();
 
-        let dir = if is_pressed {
-            self.input.movement_vector(camera)
+        let dir;
+         if self.input.mouse_pressed {
+            camera.accel = (camera.accel - self.scroll * camera.sensitivity).clamp(0.0, 300.0);
+            dir = self.input.movement_vector(camera);
         } else {
-            Vector3::zero()
-        };
+            dir = Vector3::zero();
+        }
 
         camera.velocity += dir * camera.accel * dt;
         camera.velocity *= (-camera.damping * dt).exp();

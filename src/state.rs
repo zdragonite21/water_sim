@@ -68,7 +68,6 @@ pub struct State {
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
     depth_texture: Texture,
-    pub mouse_pressed: bool,
 }
 
 impl State {
@@ -162,7 +161,7 @@ impl State {
             (0.0, 5.0, 10.0),
             cgmath::Deg(-90.0),
             cgmath::Deg(-20.0),
-            150.0,
+            100.0,
             5.0,
             0.002,
         );
@@ -310,7 +309,6 @@ impl State {
             instances,
             instance_buffer,
             depth_texture,
-            mouse_pressed: false,
         })
     }
 
@@ -346,10 +344,11 @@ impl State {
                 button: MouseButton::Right,
                 ..
             } => {
-                self.mouse_pressed = *state == winit::event::ElementState::Pressed;
-                self.window.set_cursor_visible(!self.mouse_pressed);
+                let mouse_pressed = *state == winit::event::ElementState::Pressed;
+                self.window.set_cursor_visible(!mouse_pressed);
+                self.camera_controller.input.mouse_pressed = mouse_pressed;
 
-                if self.mouse_pressed {
+                if mouse_pressed {
                     let _ = self
                         .window
                         .set_cursor_grab(CursorGrabMode::Locked)
@@ -361,7 +360,7 @@ impl State {
                 true
             }
             WindowEvent::Focused(false) => {
-                self.mouse_pressed = false;
+                self.camera_controller.input.mouse_pressed = false;
                 self.window.set_cursor_visible(true);
                 let _ = self.window.set_cursor_grab(CursorGrabMode::None);
                 self.camera_controller.clear_held_input();
@@ -372,7 +371,7 @@ impl State {
     }
 
     pub fn update(&mut self, dt: instant::Duration) {
-        self.camera_controller.update_camera(&mut self.camera, dt, self.mouse_pressed);
+        self.camera_controller.update_camera(&mut self.camera, dt);
         self.camera_uniform
             .update_view_proj(&self.camera, &self.projection);
         self.queue.write_buffer(
