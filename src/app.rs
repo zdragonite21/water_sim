@@ -143,7 +143,7 @@ impl ApplicationHandler<State> for App {
                 WindowEvent::RedrawRequested => {
                     let dt = instant::Instant::now() - self.last_render_time;
                     self.last_render_time = instant::Instant::now();
-                    
+
                     state.update(dt);
                     match state.render() {
                         Ok(_) => {}

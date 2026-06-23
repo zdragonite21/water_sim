@@ -6,7 +6,7 @@ use wgpu::util::DeviceExt;
 use winit::{
     event::{KeyEvent, MouseButton, WindowEvent},
     keyboard::PhysicalKey,
-    window::Window,
+    window::{CursorGrabMode, Window},
 };
 
 use crate::camera::{Camera, CameraController, CameraUniform, Projection};
@@ -162,8 +162,9 @@ impl State {
             (0.0, 5.0, 10.0),
             cgmath::Deg(-90.0),
             cgmath::Deg(-20.0),
-            4.0,
-            0.4,
+            150.0,
+            5.0,
+            0.002,
         );
         let projection =
             Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
@@ -335,7 +336,7 @@ impl State {
                         ..
                     },
                 ..
-            } => self.camera_controller.process_keyboard(*key, *state),
+            } => self.camera_controller.input.process_keyboard(*key, *state),
             WindowEvent::MouseWheel { delta, .. } => {
                 self.camera_controller.handle_mouse_scroll(delta);
                 true
@@ -346,6 +347,24 @@ impl State {
                 ..
             } => {
                 self.mouse_pressed = *state == winit::event::ElementState::Pressed;
+                self.window.set_cursor_visible(!self.mouse_pressed);
+
+                if self.mouse_pressed {
+                    let _ = self
+                        .window
+                        .set_cursor_grab(CursorGrabMode::Locked)
+                        .or_else(|_| self.window.set_cursor_grab(CursorGrabMode::Confined));
+                } else {
+                    let _ = self.window.set_cursor_grab(CursorGrabMode::None);
+                }
+
+                true
+            }
+            WindowEvent::Focused(false) => {
+                self.mouse_pressed = false;
+                self.window.set_cursor_visible(true);
+                let _ = self.window.set_cursor_grab(CursorGrabMode::None);
+                self.camera_controller.clear_held_input();
                 true
             }
             _ => false,
@@ -353,7 +372,7 @@ impl State {
     }
 
     pub fn update(&mut self, dt: instant::Duration) {
-        self.camera_controller.update_camera(&mut self.camera, dt);
+        self.camera_controller.update_camera(&mut self.camera, dt, self.mouse_pressed);
         self.camera_uniform
             .update_view_proj(&self.camera, &self.projection);
         self.queue.write_buffer(

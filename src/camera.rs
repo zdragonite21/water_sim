@@ -18,12 +18,21 @@ pub struct Camera {
     pub position: Point3<f32>,
     pub yaw: Rad<f32>,
     pub pitch: Rad<f32>,
-    pub speed: f32,
+    pub velocity: Vector3<f32>,
+    pub accel: f32,
+    pub damping: f32,
     pub sensitivity: f32,
 }
 
 impl Camera {
-    pub fn new<V, Y, P>(position: V, yaw: Y, pitch: P, speed: f32, sensitivity: f32) -> Self
+    pub fn new<V, Y, P>(
+        position: V,
+        yaw: Y,
+        pitch: P,
+        accel: f32,
+        damping: f32,
+        sensitivity: f32,
+    ) -> Self
     where
         V: Into<Point3<f32>>,
         Y: Into<Rad<f32>>,
@@ -33,7 +42,9 @@ impl Camera {
             position: position.into(),
             yaw: yaw.into(),
             pitch: pitch.into(),
-            speed,
+            velocity: Vector3::zero(),
+            accel,
+            damping,
             sensitivity,
         }
     }
@@ -88,11 +99,55 @@ impl Projection {
     }
 }
 
+#[derive(Default, Debug)]
+pub struct CameraInput {
+    forward: bool,
+    backward: bool,
+    left: bool,
+    right: bool,
+    up: bool,
+    down: bool,
+}
+
+impl CameraInput {
+    pub fn process_keyboard(&mut self, key: KeyCode, state: ElementState) -> bool {
+        let pressed = state == ElementState::Pressed;
+        match key {
+            KeyCode::KeyW | KeyCode::ArrowUp => self.forward = pressed,
+            KeyCode::KeyS | KeyCode::ArrowDown => self.backward = pressed,
+            KeyCode::KeyA | KeyCode::ArrowLeft => self.left = pressed,
+            KeyCode::KeyD | KeyCode::ArrowRight => self.right = pressed,
+            KeyCode::Space => self.up = pressed,
+            KeyCode::ShiftLeft => self.down = pressed,
+            _ => return false
+        }
+        true
+    }
+
+    pub fn clear(&mut self) {
+        *self = Self::default();
+    }
+
+    fn axis(positive: bool, negative: bool) -> f32 {
+        positive as i32 as f32 - negative as i32 as f32
+    }
+
+    pub fn movement_vector(&self, camera: &Camera) -> Vector3<f32> {
+        let dir = camera.forward() * Self::axis(self.forward, self.backward)
+            + camera.right() * Self::axis(self.right, self.left)
+            + Vector3::unit_y() * Self::axis(self.up, self.down);
+
+        if dir.magnitude2() > 0.0 {
+            dir.normalize()
+        } else {
+            Vector3::zero()
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct CameraController {
-    right_off: f32,
-    up_off: f32,
-    fwd_off: f32,
+    pub input: CameraInput,
     rot_hor: f32,
     rot_vert: f32,
     scroll: f32,
@@ -103,43 +158,9 @@ impl CameraController {
         Self::default()
     }
 
-    pub fn process_keyboard(&mut self, key: KeyCode, state: ElementState) -> bool {
-        if state != ElementState::Pressed {
-            return true;
-        }
-        let amount = 1.0;
-        match key {
-            KeyCode::KeyW | KeyCode::ArrowUp => {
-                self.fwd_off += amount;
-                true
-            }
-            KeyCode::KeyS | KeyCode::ArrowDown => {
-                self.fwd_off -= amount;
-                true
-            }
-            KeyCode::KeyA | KeyCode::ArrowLeft => {
-                self.right_off -= amount;
-                true
-            }
-            KeyCode::KeyD | KeyCode::ArrowRight => {
-                self.right_off += amount;
-                true
-            }
-            KeyCode::Space => {
-                self.up_off += amount;
-                true
-            }
-            KeyCode::ShiftLeft => {
-                self.up_off -= amount;
-                true
-            }
-            _ => false,
-        }
-    }
-
     pub fn handle_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
-        self.rot_hor = mouse_dx as f32;
-        self.rot_vert = mouse_dy as f32;
+        self.rot_hor += mouse_dx as f32;
+        self.rot_vert += mouse_dy as f32;
     }
 
     pub fn handle_mouse_scroll(&mut self, delta: &MouseScrollDelta) {
@@ -149,24 +170,34 @@ impl CameraController {
         };
     }
 
-    pub fn update_camera(&mut self, camera: &mut Camera, dt: Duration) {
+    pub fn update_camera(&mut self, camera: &mut Camera, dt: Duration, is_pressed: bool) {
         let dt = dt.as_secs_f32();
 
-        camera.position += camera.forward() * self.fwd_off * camera.speed * dt;
-        camera.position += camera.right() * self.right_off * camera.speed * dt;
-        camera.position += Vector3::unit_y() * self.up_off * camera.speed * dt;
-        camera.position += camera.forward() * self.scroll * camera.speed * camera.sensitivity * dt;
+        let dir = if is_pressed {
+            self.input.movement_vector(camera)
+        } else {
+            Vector3::zero()
+        };
 
-        camera.yaw += Rad(self.rot_hor) * camera.sensitivity * dt;
-        camera.pitch += Rad(-self.rot_vert) * camera.sensitivity * dt;
+        camera.velocity += dir * camera.accel * dt;
+        camera.velocity *= (-camera.damping * dt).exp();
+        camera.position += camera.velocity * dt;
 
-        self.reset();
-
+        camera.yaw += Rad(-self.rot_hor) * camera.sensitivity;
+        camera.pitch += Rad(-self.rot_vert) * camera.sensitivity;
         camera.pitch = Rad(camera.pitch.0.clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2));
+
+        self.reset_frame_input();
     }
 
-    fn reset(&mut self) {
-        *self = Self::default();
+    pub fn clear_held_input(&mut self) {
+        self.input.clear();
+    }
+
+    fn reset_frame_input(&mut self) {
+        self.rot_hor = 0.0;
+        self.rot_vert = 0.0;
+        self.scroll = 0.0;
     }
 }
 
