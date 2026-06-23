@@ -1,10 +1,12 @@
 use crate::state::State;
 use std::sync::Arc;
+#[cfg(not(target_arch = "wasm32"))]
+use winit::event::ElementState;
 use winit::{
     application::ApplicationHandler,
-    event::*,
+    event::{DeviceEvent, DeviceId, KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
-    keyboard::PhysicalKey,
+    keyboard::{KeyCode, PhysicalKey},
     window::Window,
 };
 
@@ -17,6 +19,7 @@ pub struct App {
     #[cfg(target_arch = "wasm32")]
     proxy: Option<winit::event_loop::EventLoopProxy<State>>,
     state: Option<State>,
+    last_render_time: instant::Instant,
 }
 
 impl App {
@@ -27,6 +30,7 @@ impl App {
             state: None,
             #[cfg(target_arch = "wasm32")]
             proxy,
+            last_render_time: instant::Instant::now(),
         }
     }
 }
@@ -74,6 +78,7 @@ impl ApplicationHandler<State> for App {
                 });
             }
         }
+        self.last_render_time = instant::Instant::now();
     }
 
     #[allow(unused_mut)]
@@ -89,11 +94,11 @@ impl ApplicationHandler<State> for App {
         self.state = Some(event);
     }
 
-    fn window_event(
+    fn device_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
-        _window_id: winit::window::WindowId,
-        event: WindowEvent,
+        _event_loop: &ActiveEventLoop,
+        _device_id: DeviceId,
+        event: DeviceEvent,
     ) {
         let state = match &mut self.state {
             Some(canvas) => canvas,
@@ -101,28 +106,55 @@ impl ApplicationHandler<State> for App {
         };
 
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
-            WindowEvent::Resized(size) => state.resize(size.width, size.height),
-            WindowEvent::RedrawRequested => {
-                state.update();
-                match state.render() {
-                    Ok(_) => {}
-                    Err(e) => {
-                        log::error!("{e}");
-                        event_loop.exit();
-                    }
+            DeviceEvent::MouseMotion { delta } => {
+                if state.mouse_pressed {
+                    state.camera_controller.handle_mouse(delta.0, delta.1);
                 }
             }
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        physical_key: PhysicalKey::Code(code),
-                        state: key_state,
-                        ..
-                    },
-                ..
-            } => state.handle_key(event_loop, code, key_state.is_pressed()),
-            _ => {}
+            _ => (),
+        }
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: winit::window::WindowId,
+        event: WindowEvent,
+    ) {
+        let state = match &mut self.state {
+            Some(canvas) => canvas,
+            None => return,
+        };
+
+        if window_id == state.window.id() && !state.input(&event) {
+            match event {
+                #[cfg(not(target_arch = "wasm32"))]
+                WindowEvent::CloseRequested
+                | WindowEvent::KeyboardInput {
+                    event:
+                        KeyEvent {
+                            state: ElementState::Pressed,
+                            physical_key: PhysicalKey::Code(KeyCode::Escape),
+                            ..
+                        },
+                    ..
+                } => event_loop.exit(),
+                WindowEvent::Resized(size) => state.resize(size.width, size.height),
+                WindowEvent::RedrawRequested => {
+                    let dt = instant::Instant::now() - self.last_render_time;
+                    self.last_render_time = instant::Instant::now();
+                    
+                    state.update(dt);
+                    match state.render() {
+                        Ok(_) => {}
+                        Err(e) => {
+                            log::error!("{e}");
+                            event_loop.exit();
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 }

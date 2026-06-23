@@ -7,4 +7,7 @@
         "titleBar.inactiveForeground": "#FFFFFF"
     },
     // "rust-analyzer.cargo.target": "wasm32-unknown-unknown",
+
+    "editor.inlineSuggest.minShowDelay": 500,
+    "editor.inlineSuggest.edits.showCollapsed": true,
 }

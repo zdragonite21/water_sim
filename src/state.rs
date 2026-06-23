@@ -3,9 +3,13 @@ use std::sync::Arc;
 
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
-use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
+use winit::{
+    event::{KeyEvent, MouseButton, WindowEvent},
+    keyboard::PhysicalKey,
+    window::Window,
+};
 
-use crate::camera::{Camera, CameraController, CameraUniform};
+use crate::camera::{Camera, CameraController, CameraUniform, Projection};
 use crate::model::{Model, ModelVertex, Vertex};
 use crate::resource;
 use crate::texture::Texture;
@@ -55,7 +59,8 @@ pub struct State {
     pub window: Arc<Window>,
     render_pipeline: wgpu::RenderPipeline,
     camera: Camera,
-    camera_controller: CameraController,
+    projection: Projection,
+    pub camera_controller: CameraController,
     camera_uniform: CameraUniform,
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
@@ -63,6 +68,7 @@ pub struct State {
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
     depth_texture: Texture,
+    pub mouse_pressed: bool,
 }
 
 impl State {
@@ -115,16 +121,17 @@ impl State {
             .find(|f| f.is_srgb())
             .copied()
             .unwrap_or(surface_caps.formats[0]);
-        let config: wgpu::wgt::SurfaceConfiguration<Vec<wgpu::TextureFormat>> = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width: size.width,
-            height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
-            desired_maximum_frame_latency: 2,
-        };
+        let config: wgpu::wgt::SurfaceConfiguration<Vec<wgpu::TextureFormat>> =
+            wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                format: surface_format,
+                width: size.width,
+                height: size.height,
+                present_mode: wgpu::PresentMode::Fifo,
+                alpha_mode: surface_caps.alpha_modes[0],
+                view_formats: vec![],
+                desired_maximum_frame_latency: 2,
+            };
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -151,20 +158,19 @@ impl State {
 
         let depth_texture = Texture::create_depth_texture(&device, &config, "depth_texture");
 
-        let camera = Camera {
-            eye: (0.0, 5.0, 10.0).into(),
-            target: (0.0, 0.0, 0.0).into(),
-            up: cgmath::Vector3::unit_y(),
-            aspect: config.width as f32 / config.height as f32,
-            fovy: 45.0,
-            znear: 0.1,
-            zfar: 100.0,
-        };
-
-        let camera_controller = CameraController::new(0.2);
+        let camera = Camera::new(
+            (0.0, 5.0, 10.0),
+            cgmath::Deg(-90.0),
+            cgmath::Deg(-20.0),
+            4.0,
+            0.4,
+        );
+        let projection =
+            Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
+        let camera_controller = CameraController::new();
 
         let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera);
+        camera_uniform.update_view_proj(&camera, &projection);
 
         let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Camera Buffer"),
@@ -294,6 +300,7 @@ impl State {
             render_pipeline,
             window,
             camera,
+            projection,
             camera_controller,
             camera_uniform,
             camera_buffer,
@@ -302,6 +309,7 @@ impl State {
             instances,
             instance_buffer,
             depth_texture,
+            mouse_pressed: false,
         })
     }
 
@@ -309,7 +317,7 @@ impl State {
         if width > 0 && height > 0 {
             self.config.width = width;
             self.config.height = height;
-            self.camera.aspect = width as f32 / height as f32;
+            self.projection.resize(width, height);
             self.surface.configure(&self.device, &self.config);
             self.depth_texture =
                 Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
@@ -317,18 +325,37 @@ impl State {
         }
     }
 
-    pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, code: KeyCode, is_pressed: bool) {
-        match (code, is_pressed) {
-            (KeyCode::Escape, true) => event_loop.exit(),
-            _ => {
-                self.camera_controller.handle_key(code, is_pressed);
+    pub fn input(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        physical_key: PhysicalKey::Code(key),
+                        state,
+                        ..
+                    },
+                ..
+            } => self.camera_controller.process_keyboard(*key, *state),
+            WindowEvent::MouseWheel { delta, .. } => {
+                self.camera_controller.handle_mouse_scroll(delta);
+                true
             }
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Right,
+                ..
+            } => {
+                self.mouse_pressed = *state == winit::event::ElementState::Pressed;
+                true
+            }
+            _ => false,
         }
     }
 
-    pub fn update(&mut self) {
-        self.camera_controller.update_camera(&mut self.camera);
-        self.camera_uniform.update_view_proj(&self.camera);
+    pub fn update(&mut self, dt: instant::Duration) {
+        self.camera_controller.update_camera(&mut self.camera, dt);
+        self.camera_uniform
+            .update_view_proj(&self.camera, &self.projection);
         self.queue.write_buffer(
             &self.camera_buffer,
             0,
@@ -403,7 +430,11 @@ impl State {
         render_pass.set_pipeline(&self.render_pipeline);
 
         use crate::model::DrawModel;
-        render_pass.draw_model_instanced(&self.obj_model, 0..self.instances.len() as u32, &self.camera_bind_group);
+        render_pass.draw_model_instanced(
+            &self.obj_model,
+            0..self.instances.len() as u32,
+            &self.camera_bind_group,
+        );
 
         drop(render_pass);
 
