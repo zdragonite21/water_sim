@@ -181,8 +181,7 @@ impl DemoScene {
         self.depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
     }
 
-    #[allow(unused)]
-    pub fn update(&mut self, dt: instant::Duration) {
+    pub fn update(&mut self, _dt: instant::Duration) {
         ()
     }
 

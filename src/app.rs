@@ -139,11 +139,7 @@ impl ApplicationHandler<State> for App {
                 } => event_loop.exit(),
                 WindowEvent::Resized(size) => state.resize(size.width, size.height),
                 WindowEvent::RedrawRequested => {
-                    let dt = instant::Instant::now() - self.last_render_time;
-                    self.last_render_time = instant::Instant::now();
-
-                    state.update(dt);
-                    match state.render() {
+                    match state.frame() {
                         Ok(_) => {}
                         Err(e) => {
                             log::error!("{e}");

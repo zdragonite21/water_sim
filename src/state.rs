@@ -9,6 +9,7 @@ use winit::{
 
 use crate::camera::CameraRig;
 use crate::scene::DemoScene;
+use crate::frame_clock::FrameClock;
 
 pub struct State {
     pub window: Arc<Window>,
@@ -20,6 +21,7 @@ pub struct State {
 
     pub camera: CameraRig,
     scene: DemoScene,
+    frame_clock: FrameClock,
 }
 
 impl State {
@@ -87,6 +89,8 @@ impl State {
         let camera = CameraRig::new(&device, config.width, config.height);
 
         let scene = DemoScene::new(&device, &queue, &config, &camera.bind_group_layout).await?;
+        
+        let frame_clock = FrameClock::new();
 
         Ok(Self {
             window,
@@ -97,6 +101,7 @@ impl State {
             is_surface_configured: false,
             camera,
             scene,
+            frame_clock,
         })
     }
 
@@ -160,6 +165,7 @@ impl State {
 
     pub fn update(&mut self, dt: instant::Duration) {
         self.camera.update(&self.queue, dt);
+        self.scene.update(dt);
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {
@@ -209,5 +215,11 @@ impl State {
         }
 
         Ok(())
+    }
+
+    pub fn frame(&mut self) -> anyhow::Result<()> {
+        self.frame_clock.tick();
+        self.update(self.frame_clock.dt);
+        self.render()
     }
 }
