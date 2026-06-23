@@ -9,7 +9,7 @@ use winit::{
     window::{CursorGrabMode, Window},
 };
 
-use crate::camera::{Camera, CameraController, CameraUniform, Projection};
+use crate::camera::CameraRig;
 use crate::model::{Model, ModelVertex, Vertex};
 use crate::resource;
 use crate::texture::Texture;
@@ -58,12 +58,9 @@ pub struct State {
     is_surface_configured: bool,
     pub window: Arc<Window>,
     render_pipeline: wgpu::RenderPipeline,
-    camera: Camera,
-    projection: Projection,
-    pub camera_controller: CameraController,
-    camera_uniform: CameraUniform,
-    camera_buffer: wgpu::Buffer,
-    camera_bind_group: wgpu::BindGroup,
+
+    pub camera: CameraRig,
+
     obj_model: Model,
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
@@ -157,60 +154,15 @@ impl State {
 
         let depth_texture = Texture::create_depth_texture(&device, &config, "depth_texture");
 
-        let camera = Camera::new(
-            (0.0, 5.0, 10.0),
-            cgmath::Deg(-90.0),
-            cgmath::Deg(-20.0),
-            100.0,
-            5.0,
-            0.002,
-            0.3,
-        );
-        let projection =
-            Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
-        let camera_controller = CameraController::new();
-
-        let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera, &projection);
-
-        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Camera Buffer"),
-            contents: bytemuck::cast_slice(&[camera_uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let camera_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-                label: Some("camera_bind_group_layout"),
-            });
-
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &camera_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            }],
-            label: Some("camera_bind_group"),
-        });
-
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
+        let camera = CameraRig::new(&device, &config);
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[
                     Some(&texture_bind_group_layout),
-                    Some(&camera_bind_group_layout),
+                    Some(&camera.bind_group_layout),
                 ],
                 immediate_size: 0,
             });
@@ -301,11 +253,6 @@ impl State {
             render_pipeline,
             window,
             camera,
-            projection,
-            camera_controller,
-            camera_uniform,
-            camera_buffer,
-            camera_bind_group,
             obj_model,
             instances,
             instance_buffer,
@@ -317,7 +264,7 @@ impl State {
         if width > 0 && height > 0 {
             self.config.width = width;
             self.config.height = height;
-            self.projection.resize(width, height);
+            self.camera.projection.resize(width, height);
             self.surface.configure(&self.device, &self.config);
             self.depth_texture =
                 Texture::create_depth_texture(&self.device, &self.config, "depth_texture");
@@ -335,9 +282,9 @@ impl State {
                         ..
                     },
                 ..
-            } => self.camera_controller.input.process_keyboard(*key, *state),
+            } => self.camera.controller.input.process_keyboard(*key, *state),
             WindowEvent::MouseWheel { delta, .. } => {
-                self.camera_controller.handle_mouse_scroll(delta);
+                self.camera.controller.handle_mouse_scroll(delta);
                 true
             }
             WindowEvent::MouseInput {
@@ -347,7 +294,7 @@ impl State {
             } => {
                 let mouse_pressed = *state == winit::event::ElementState::Pressed;
                 self.window.set_cursor_visible(!mouse_pressed);
-                self.camera_controller.set_captured(mouse_pressed);
+                self.camera.controller.set_captured(mouse_pressed);
 
                 if mouse_pressed {
                     let _ = self
@@ -361,7 +308,7 @@ impl State {
                 true
             }
             WindowEvent::Focused(false) => {
-                self.camera_controller.set_captured(false);
+                self.camera.controller.set_captured(false);
                 self.window.set_cursor_visible(true);
                 let _ = self.window.set_cursor_grab(CursorGrabMode::None);
                 true
@@ -371,13 +318,12 @@ impl State {
     }
 
     pub fn update(&mut self, dt: instant::Duration) {
-        self.camera_controller.update_camera(&mut self.camera, dt);
-        self.camera_uniform
-            .update_view_proj(&self.camera, &self.projection);
+        self.camera.update(dt);
+        
         self.queue.write_buffer(
-            &self.camera_buffer,
+            &self.camera.buffer,
             0,
-            bytemuck::cast_slice(&[self.camera_uniform]),
+            bytemuck::cast_slice(&[self.camera.uniform]),
         );
     }
 
@@ -451,7 +397,7 @@ impl State {
         render_pass.draw_model_instanced(
             &self.obj_model,
             0..self.instances.len() as u32,
-            &self.camera_bind_group,
+            &self.camera.bind_group,
         );
 
         drop(render_pass);

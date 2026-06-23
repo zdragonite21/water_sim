@@ -107,7 +107,7 @@ impl ApplicationHandler<State> for App {
 
         match event {
             DeviceEvent::MouseMotion { delta } => {
-                state.camera_controller.handle_mouse(delta.0, delta.1);
+                state.camera.controller.handle_mouse(delta.0, delta.1);
             }
             _ => (),
         }

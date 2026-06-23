@@ -1,6 +1,7 @@
 use cgmath::*;
 use instant::Duration;
 use std::f32::consts::FRAC_PI_2;
+use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalPosition;
 use winit::event::*;
 use winit::keyboard::KeyCode;
@@ -234,5 +235,80 @@ impl CameraUniform {
 
     pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
         self.view_proj = (projection.proj_matrix() * camera.view_matrix()).into();
+    }
+}
+
+pub struct CameraRig {
+    pub camera: Camera,
+    pub projection: Projection,
+    pub controller: CameraController,
+    pub uniform: CameraUniform,
+    pub buffer: wgpu::Buffer,
+    pub bind_group: wgpu::BindGroup,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+}
+
+impl CameraRig {
+    pub fn new(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> Self {
+        let camera = Camera::new(
+            (0.0, 5.0, 10.0),
+            cgmath::Deg(-90.0),
+            cgmath::Deg(-20.0),
+            100.0,
+            5.0,
+            0.002,
+            0.3,
+        );
+        let projection =
+            Projection::new(config.width, config.height, cgmath::Deg(45.0), 0.1, 100.0);
+        let controller = CameraController::new();
+
+        let mut uniform = CameraUniform::new();
+        uniform.update_view_proj(&camera, &projection);
+
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera Buffer"),
+            contents: bytemuck::cast_slice(&[uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+            label: Some("camera_bind_group_layout"),
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+            label: Some("camera_bind_group"),
+        });
+
+        Self {
+            camera,
+            projection,
+            controller,
+            uniform,
+            buffer,
+            bind_group,
+            bind_group_layout,
+        }
+    }
+
+    pub fn update(&mut self, dt: Duration) {
+        self.controller.update_camera(&mut self.camera, dt);
+        self.uniform
+            .update_view_proj(&self.camera, &self.projection);
     }
 }
