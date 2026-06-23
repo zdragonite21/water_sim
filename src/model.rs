@@ -34,12 +34,14 @@ pub struct Model {
     pub materials: Vec<Material>,
 }
 
+#[allow(unused)]
 pub struct Material {
     pub name: String,
     pub diffuse_texture: Texture,
     pub bind_group: wgpu::BindGroup,
 }
 
+#[allow(unused)]
 pub struct Mesh {
     pub name: String,
     pub vertex_buffer: wgpu::Buffer,
@@ -48,6 +50,7 @@ pub struct Mesh {
     pub material: usize,
 }
 
+#[allow(unused)]
 pub trait DrawModel {
     fn draw_mesh(&mut self, mesh: &Mesh, material: &Material, camera_bind_group: &wgpu::BindGroup);
     fn draw_mesh_instanced(
@@ -94,8 +97,7 @@ impl DrawModel for wgpu::RenderPass<'_> {
         model: &Model,
         instances: Range<u32>,
         camera_bind_group: &wgpu::BindGroup,
-    )
-    {
+    ) {
         for mesh in &model.meshes {
             let material = &model.materials[mesh.material];
             self.draw_mesh_instanced(mesh, material, instances.clone(), camera_bind_group);
