@@ -6,3 +6,4 @@ mod state;
 mod texture;
 mod scene;
 mod frame_clock;
+mod instance;
