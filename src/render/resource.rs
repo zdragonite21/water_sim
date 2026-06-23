@@ -1,7 +1,7 @@
 use std::io::{BufReader, Cursor};
 use wgpu::util::DeviceExt;
 
-use crate::{
+use super::{
     model::{self, Model},
     texture::{self, Texture},
 };

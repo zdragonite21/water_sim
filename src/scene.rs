@@ -1,5 +1,5 @@
-use crate::resource;
-use crate::{
+use crate::render::{
+    resource,
     model::{Model, ModelVertex, Vertex},
     texture::Texture,
     instance::{Instance, InstanceRaw},
@@ -188,7 +188,7 @@ impl DemoScene {
         render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
         render_pass.set_pipeline(&self.render_pipeline);
 
-        use crate::model::DrawModel;
+        use crate::render::model::DrawModel;
         render_pass.draw_model_instanced(
             &self.obj_model,
             0..self.instances.len() as u32,
