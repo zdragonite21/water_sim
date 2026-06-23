@@ -4,3 +4,4 @@ mod model;
 mod resource;
 mod state;
 mod texture;
+mod scene;
