@@ -19,7 +19,6 @@ pub struct App {
     #[cfg(target_arch = "wasm32")]
     proxy: Option<winit::event_loop::EventLoopProxy<State>>,
     state: Option<State>,
-    last_render_time: instant::Instant,
 }
 
 impl App {
@@ -30,7 +29,6 @@ impl App {
             state: None,
             #[cfg(target_arch = "wasm32")]
             proxy,
-            last_render_time: instant::Instant::now(),
         }
     }
 }
@@ -78,7 +76,6 @@ impl ApplicationHandler<State> for App {
                 });
             }
         }
-        self.last_render_time = instant::Instant::now();
     }
 
     #[allow(unused_mut)]
