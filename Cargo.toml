@@ -3,6 +3,10 @@ name = "water_sim"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "water_sim_app"
+path = "src/main.rs"
+
 [profile.release]
 strip = true
 

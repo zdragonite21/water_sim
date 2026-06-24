@@ -1,0 +1,2 @@
+[env]
+RUST_LOG="water_sim=debug,wgpu=error"
