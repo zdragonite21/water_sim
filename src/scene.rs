@@ -101,6 +101,8 @@ impl DemoScene {
             cache: None,
         });
 
+        log::debug!("render pipeline created!");
+
         let obj_model =
             resource::load_model("cube.obj", &device, &queue, &texture_bind_group_layout)
                 .await
@@ -145,6 +147,7 @@ impl DemoScene {
 
     pub fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
         self.depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
+        log::debug!("depth texture rebuilt {}x{}", config.width, config.height);
     }
 
     pub fn update(&mut self, _dt: instant::Duration) {

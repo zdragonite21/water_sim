@@ -48,7 +48,7 @@ impl State {
 
         let info = adapter.get_info();
         log::info!(
-            "\nGPU: {} \nbackend: {:?} \ndriver: {} \ndriver info: {}",
+            "\nGPU: {} \nbackend: {:?} \ndriver: {} \ndriver info: {}\n",
             info.name,
             info.backend,
             info.driver,
@@ -74,6 +74,14 @@ impl State {
             .find(|f| f.is_srgb())
             .copied()
             .unwrap_or(surface_caps.formats[0]);
+
+        log::info!(
+            "\nsurface format: {:?}\npresent modes: {:?}\nalpha modes: {:?}\n",
+            surface_format,
+            surface_caps.present_modes,
+            surface_caps.alpha_modes
+        );
+
         let config: wgpu::wgt::SurfaceConfiguration<Vec<wgpu::TextureFormat>> =
             wgpu::SurfaceConfiguration {
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -89,7 +97,8 @@ impl State {
         let camera = CameraRig::new(&device, config.width, config.height);
 
         let scene = DemoScene::new(&device, &queue, &config, &camera.bind_group_layout).await?;
-        
+        log::debug!("scene created!");
+
         let frame_clock = FrameClock::new();
 
         Ok(Self {
@@ -113,8 +122,11 @@ impl State {
 
             self.camera.resize(width, height);
             self.scene.resize(&self.device, &self.config);
+            log::debug!("surface resized to {}x{}", width, height);
 
             self.is_surface_configured = true;
+        } else {
+            log::warn!("surface resize to {}x{} ignored", width, height);
         }
     }
 
@@ -147,8 +159,10 @@ impl State {
                         .window
                         .set_cursor_grab(CursorGrabMode::Locked)
                         .or_else(|_| self.window.set_cursor_grab(CursorGrabMode::Confined));
+                    log::debug!("cursor captured");
                 } else {
                     let _ = self.window.set_cursor_grab(CursorGrabMode::None);
+                    log::debug!("cursor released");
                 }
 
                 true
@@ -157,6 +171,7 @@ impl State {
                 self.camera.controller.set_captured(false);
                 self.window.set_cursor_visible(true);
                 let _ = self.window.set_cursor_grab(CursorGrabMode::None);
+                log::debug!("window lost focus, cursor released");
                 true
             }
             _ => false,
@@ -172,6 +187,7 @@ impl State {
         self.window.request_redraw();
 
         if !self.is_surface_configured {
+            log::warn!("surface not configured yet, skipping render");
             return Ok(());
         }
 
@@ -182,9 +198,11 @@ impl State {
                 Success(surface_texture) => (surface_texture, false),
                 Suboptimal(surface_texture) => (surface_texture, true),
                 Timeout | Occluded | Validation => {
+                    log::warn!("failed to acquire current texture");
                     return Ok(());
                 }
                 Outdated => {
+                    log::warn!("surface outdated, reconfiguring");
                     self.surface.configure(&self.device, &self.config);
                     return Ok(());
                 }

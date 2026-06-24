@@ -76,6 +76,8 @@ impl ApplicationHandler<State> for App {
                 });
             }
         }
+
+        log::debug!("state created!");
     }
 
     #[allow(unused_mut)]
