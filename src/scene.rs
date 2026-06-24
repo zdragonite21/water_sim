@@ -23,7 +23,7 @@ impl DemoScene {
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
     ) -> anyhow::Result<Self> {
-        let depth_texture = Texture::create_depth_texture(&device, &config, "depth_texture");
+        let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 
         let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
 
@@ -53,7 +53,7 @@ impl DemoScene {
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[Some(&texture_bind_group_layout), Some(&camera_layout)],
+                bind_group_layouts: &[Some(&texture_bind_group_layout), Some(camera_layout)],
                 immediate_size: 0,
             });
 
@@ -101,12 +101,10 @@ impl DemoScene {
             cache: None,
         });
 
-        log::debug!("render pipeline created!");
+        log::debug!("demo scene render pipeline created");
 
         let obj_model =
-            resource::load_model("cube.obj", &device, &queue, &texture_bind_group_layout)
-                .await
-                .unwrap();
+            resource::load_model("cube.obj", device, queue, &texture_bind_group_layout).await?;
 
         const SPACE_BETWEEN: f32 = 3.0;
         let instances = (0..NUM_INSTANCES_PER_ROW)
@@ -135,6 +133,7 @@ impl DemoScene {
             contents: bytemuck::cast_slice(&instance_data),
             usage: wgpu::BufferUsages::VERTEX,
         });
+        log::debug!("demo scene instances created: {}", instances.len());
 
         Ok(Self {
             render_pipeline,
@@ -163,7 +162,7 @@ impl DemoScene {
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &target_view,
+                view: target_view,
                 resolve_target: None,
                 depth_slice: None,
                 ops: wgpu::Operations {

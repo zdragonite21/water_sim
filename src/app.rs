@@ -76,8 +76,6 @@ impl ApplicationHandler<State> for App {
                 });
             }
         }
-
-        log::debug!("state created!");
     }
 
     #[allow(unused_mut)]
@@ -155,7 +153,7 @@ impl ApplicationHandler<State> for App {
 pub fn run() -> anyhow::Result<()> {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        env_logger::init();
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     }
     #[cfg(target_arch = "wasm32")]
     {

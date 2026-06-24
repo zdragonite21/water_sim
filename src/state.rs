@@ -7,9 +7,8 @@ use winit::{
     window::{CursorGrabMode, Window},
 };
 
-use crate::camera::CameraRig;
-use crate::scene::DemoScene;
 use crate::frame_clock::FrameClock;
+use crate::{camera::CameraRig, scene::DemoScene};
 
 pub struct State {
     pub window: Arc<Window>,
@@ -48,7 +47,7 @@ impl State {
 
         let info = adapter.get_info();
         log::info!(
-            "\nGPU: {} \nbackend: {:?} \ndriver: {} \ndriver info: {}\n",
+            "using GPU '{}' ({:?}), driver: {} ({})",
             info.name,
             info.backend,
             info.driver,
@@ -75,8 +74,8 @@ impl State {
             .copied()
             .unwrap_or(surface_caps.formats[0]);
 
-        log::info!(
-            "\nsurface format: {:?}\npresent modes: {:?}\nalpha modes: {:?}\n",
+        log::debug!(
+            "surface capabilities: selected_format={:?}, present_modes={:?}, alpha_modes={:?}",
             surface_format,
             surface_caps.present_modes,
             surface_caps.alpha_modes
@@ -97,7 +96,7 @@ impl State {
         let camera = CameraRig::new(&device, config.width, config.height);
 
         let scene = DemoScene::new(&device, &queue, &config, &camera.bind_group_layout).await?;
-        log::debug!("scene created!");
+        log::debug!("demo scene created");
 
         let frame_clock = FrameClock::new();
 
@@ -126,7 +125,7 @@ impl State {
 
             self.is_surface_configured = true;
         } else {
-            log::warn!("surface resize to {}x{} ignored", width, height);
+            log::debug!("ignored zero-sized surface resize: {}x{}", width, height);
         }
     }
 
@@ -187,7 +186,7 @@ impl State {
         self.window.request_redraw();
 
         if !self.is_surface_configured {
-            log::warn!("surface not configured yet, skipping render");
+            log::debug!("surface not configured yet; skipping render");
             return Ok(());
         }
 
@@ -197,12 +196,20 @@ impl State {
             match self.surface.get_current_texture() {
                 Success(surface_texture) => (surface_texture, false),
                 Suboptimal(surface_texture) => (surface_texture, true),
-                Timeout | Occluded | Validation => {
-                    log::warn!("failed to acquire current texture");
+                Timeout => {
+                    log::debug!("surface texture acquisition timed out; skipping frame");
+                    return Ok(());
+                }
+                Occluded => {
+                    log::debug!("surface is occluded; skipping frame");
+                    return Ok(());
+                }
+                Validation => {
+                    log::warn!("surface texture acquisition failed validation; skipping frame");
                     return Ok(());
                 }
                 Outdated => {
-                    log::warn!("surface outdated, reconfiguring");
+                    log::debug!("surface outdated; reconfiguring");
                     self.surface.configure(&self.device, &self.config);
                     return Ok(());
                 }
@@ -229,6 +236,7 @@ impl State {
         output.present();
 
         if reconfigure_after_present {
+            log::debug!("surface suboptimal after present; reconfiguring");
             self.surface.configure(&self.device, &self.config);
         }
 
