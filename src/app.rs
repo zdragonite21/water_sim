@@ -134,7 +134,7 @@ impl ApplicationHandler<State> for App {
             return;
         }
 
-        if !state.input(&event) {
+        if !(state.handle_shortcut(&event) || state.input(&event)) {
             match event {
                 #[cfg(not(target_arch = "wasm32"))]
                 WindowEvent::CloseRequested
