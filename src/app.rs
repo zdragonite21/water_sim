@@ -1,4 +1,4 @@
-use crate::state::State;
+use crate::{config::AppConfig, state::State};
 use std::sync::Arc;
 #[cfg(not(target_arch = "wasm32"))]
 use winit::event::ElementState;
@@ -15,20 +15,39 @@ use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::EventLoopExtWebSys;
 
+const CONFIG_FILE: &str = "config.toml";
+
 pub struct App {
     #[cfg(target_arch = "wasm32")]
     proxy: Option<winit::event_loop::EventLoopProxy<State>>,
     state: Option<State>,
+    config: AppConfig,
 }
 
 impl App {
     pub fn new(#[cfg(target_arch = "wasm32")] event_loop: &EventLoop<State>) -> Self {
         #[cfg(target_arch = "wasm32")]
         let proxy = Some(event_loop.create_proxy());
+
+        let config = AppConfig::load(CONFIG_FILE).unwrap_or_else(|err| {
+            log::warn!("failed to load {CONFIG_FILE}; using defaults: {err}");
+            AppConfig::default()
+        });
         Self {
             state: None,
             #[cfg(target_arch = "wasm32")]
             proxy,
+            config,
+        }
+    }
+
+    pub fn save_config(&self) {
+        if let Some(state) = &self.state {
+            if let Err(err) = state.current_config().save(CONFIG_FILE) {
+                log::warn!("failed to save {CONFIG_FILE}: {err}");
+            } else {
+                log::debug!("saving {CONFIG_FILE}");
+            }
         }
     }
 }
@@ -55,7 +74,7 @@ impl ApplicationHandler<State> for App {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.state = Some(pollster::block_on(State::new(window)).unwrap());
+            self.state = Some(pollster::block_on(State::new(window, &self.config)).unwrap());
         }
 
         #[cfg(target_arch = "wasm32")]
@@ -67,7 +86,7 @@ impl ApplicationHandler<State> for App {
                     assert!(
                         proxy
                             .send_event(
-                                State::new(window)
+                                State::new(window, &self.config)
                                     .await
                                     .expect("Unable to create canvas!!!")
                             )
@@ -158,6 +177,10 @@ impl ApplicationHandler<State> for App {
                 _ => {}
             }
         }
+    }
+
+    fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        self.save_config();
     }
 }
 

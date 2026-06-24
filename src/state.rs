@@ -7,7 +7,7 @@ use winit::{
     window::{CursorGrabMode, Window},
 };
 
-use crate::{camera::CameraRig, scene::DemoScene};
+use crate::{camera::CameraRig, config::AppConfig, scene::DemoScene};
 use crate::{frame_clock::FrameClock, gui::Gui};
 
 pub struct State {
@@ -25,7 +25,7 @@ pub struct State {
 }
 
 impl State {
-    pub async fn new(window: Arc<Window>) -> anyhow::Result<State> {
+    pub async fn new(window: Arc<Window>, app_config: &AppConfig) -> anyhow::Result<State> {
         let size = window.inner_size();
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -94,7 +94,7 @@ impl State {
                 desired_maximum_frame_latency: 2,
             };
 
-        let camera = CameraRig::new(&device, config.width, config.height);
+        let camera = CameraRig::new(&device, config.width, config.height, &app_config.camera);
 
         let scene = DemoScene::new(&device, &queue, &config, &camera.bind_group_layout).await?;
         log::debug!("demo scene created");
@@ -295,6 +295,7 @@ impl State {
             .render(&mut encoder, &view, &self.camera.bind_group)?;
 
         self.gui.render(
+            self.frame_clock.dt,
             &self.device,
             &self.queue,
             &mut encoder,
@@ -318,5 +319,11 @@ impl State {
         self.frame_clock.tick();
         self.update(self.frame_clock.dt);
         self.render()
+    }
+
+    pub fn current_config(&self) -> AppConfig {
+        AppConfig {
+            camera: self.camera.current_config(),
+        }
     }
 }

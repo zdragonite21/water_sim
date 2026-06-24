@@ -63,6 +63,7 @@ impl Gui {
 
     pub fn render(
         &mut self,
+        dt: instant::Duration,
         device: &Device,
         queue: &Queue,
         encoder: &mut wgpu::CommandEncoder,
@@ -70,7 +71,9 @@ impl Gui {
         window: &Window,
         camera: &mut Camera,
     ) -> anyhow::Result<()> {
+        self.context.io_mut().update_delta_time(dt);
         self.platform.prepare_frame(self.context.io_mut(), window)?;
+
 
         let ui = self.context.frame();
 

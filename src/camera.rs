@@ -6,6 +6,8 @@ use winit::dpi::PhysicalPosition;
 use winit::event::*;
 use winit::keyboard::KeyCode;
 
+use crate::config::CameraConfig;
+
 pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::from_cols(
     Vector4::new(1.0, 0.0, 0.0, 0.0),
     Vector4::new(0.0, 1.0, 0.0, 0.0),
@@ -267,8 +269,8 @@ pub struct CameraRig {
 }
 
 impl CameraRig {
-    pub fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
-        let camera = Camera::new(100.0, 5.0, 0.002, 0.3);
+    pub fn new(device: &wgpu::Device, width: u32, height: u32, config: &CameraConfig) -> Self {
+        let camera = Camera::new(config.accel, config.damping, config.mouse_sens, config.scroll_sens);
         let projection = Projection::new(width, height, cgmath::Deg(45.0), 0.1, 100.0);
         let controller = CameraController::new();
 
@@ -325,5 +327,14 @@ impl CameraRig {
 
     pub fn resize(&mut self, width: u32, height: u32) {
         self.projection.resize(width, height);
+    }
+
+    pub fn current_config(&self) -> CameraConfig {
+        CameraConfig {
+            accel: self.camera.accel,
+            damping: self.camera.damping,
+            mouse_sens: self.camera.mouse_sens,
+            scroll_sens: self.camera.scroll_sens,
+        }
     }
 }

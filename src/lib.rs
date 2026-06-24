@@ -6,3 +6,4 @@ mod gui;
 mod render;
 mod scene;
 mod state;
+mod config;
