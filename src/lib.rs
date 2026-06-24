@@ -1,6 +1,8 @@
 pub mod app;
 mod camera;
-mod render;
-mod state;
-mod scene;
+// mod config;
 mod frame_clock;
+mod gui;
+mod render;
+mod scene;
+mod state;

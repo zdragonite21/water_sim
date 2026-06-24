@@ -24,7 +24,10 @@ instant = "0.1"
 
 imgui = "0.12"
 imgui-winit-support = "0.13"
-imgui-wgpu = "0.25"
+imgui-wgpu = "0.28"
+
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
 
 [dependencies.image]
 version = "0.24"

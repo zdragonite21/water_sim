@@ -4,7 +4,7 @@ use std::sync::Arc;
 use winit::event::ElementState;
 use winit::{
     application::ApplicationHandler,
-    event::{DeviceEvent, DeviceId, KeyEvent, WindowEvent},
+    event::{DeviceEvent, DeviceId, Event, KeyEvent, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
     keyboard::{KeyCode, PhysicalKey},
     window::Window,
@@ -104,7 +104,9 @@ impl ApplicationHandler<State> for App {
 
         match event {
             DeviceEvent::MouseMotion { delta } => {
-                state.camera.controller.handle_mouse(delta.0, delta.1);
+                if state.camera.controller.is_captured() {
+                    state.camera.controller.handle_mouse(delta.0, delta.1);
+                }
             }
             _ => (),
         }
@@ -121,7 +123,18 @@ impl ApplicationHandler<State> for App {
             None => return,
         };
 
-        if window_id == state.window.id() && !state.input(&event) {
+        let event: Event<State> = Event::WindowEvent { window_id, event };
+        state.handle_event(&event);
+
+        let Event::WindowEvent { window_id, event } = event else {
+            return;
+        };
+
+        if window_id != state.window.id() {
+            return;
+        }
+
+        if !state.input(&event) {
             match event {
                 #[cfg(not(target_arch = "wasm32"))]
                 WindowEvent::CloseRequested
@@ -135,15 +148,13 @@ impl ApplicationHandler<State> for App {
                     ..
                 } => event_loop.exit(),
                 WindowEvent::Resized(size) => state.resize(size.width, size.height),
-                WindowEvent::RedrawRequested => {
-                    match state.frame() {
-                        Ok(_) => {}
-                        Err(e) => {
-                            log::error!("{e}");
-                            event_loop.exit();
-                        }
+                WindowEvent::RedrawRequested => match state.frame() {
+                    Ok(_) => {}
+                    Err(e) => {
+                        log::error!("{e}");
+                        event_loop.exit();
                     }
-                }
+                },
                 _ => {}
             }
         }

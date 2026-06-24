@@ -2,13 +2,13 @@ use std::default::Default;
 use std::sync::Arc;
 
 use winit::{
-    event::{KeyEvent, MouseButton, WindowEvent},
+    event::{ElementState, KeyEvent, MouseButton, WindowEvent},
     keyboard::PhysicalKey,
     window::{CursorGrabMode, Window},
 };
 
-use crate::frame_clock::FrameClock;
 use crate::{camera::CameraRig, scene::DemoScene};
+use crate::{frame_clock::FrameClock, gui::DebugGui};
 
 pub struct State {
     pub window: Arc<Window>,
@@ -21,6 +21,7 @@ pub struct State {
     pub camera: CameraRig,
     scene: DemoScene,
     frame_clock: FrameClock,
+    debug_gui: DebugGui,
 }
 
 impl State {
@@ -100,6 +101,8 @@ impl State {
 
         let frame_clock = FrameClock::new();
 
+        let debug_gui = DebugGui::new(&device, &queue, &window, surface_format);
+
         Ok(Self {
             window,
             surface,
@@ -110,6 +113,7 @@ impl State {
             camera,
             scene,
             frame_clock,
+            debug_gui,
         })
     }
 
@@ -129,6 +133,41 @@ impl State {
         }
     }
 
+    pub fn handle_event<T>(&mut self, event: &winit::event::Event<T>) {
+        self.debug_gui.handle_event(&self.window, event);
+    }
+
+    pub fn gui_wants_keyboard(&self) -> bool {
+        self.debug_gui.wants_keyboard()
+    }
+
+    pub fn gui_wants_mouse(&self) -> bool {
+        self.debug_gui.wants_mouse()
+    }
+
+    fn set_camera_capture(&mut self, captured: bool) {
+        self.camera.controller.set_captured(captured);
+        self.window.set_cursor_visible(!captured);
+
+        if captured {
+            match self
+                .window
+                .set_cursor_grab(CursorGrabMode::Locked)
+                .or_else(|_| self.window.set_cursor_grab(CursorGrabMode::Confined))
+            {
+                Ok(()) => log::debug!("cursor captured"),
+                Err(err) => {
+                    self.camera.controller.set_captured(false);
+                    self.window.set_cursor_visible(true);
+                    log::warn!("failed to capture cursor: {err}");
+                }
+            }
+        } else {
+            let _ = self.window.set_cursor_grab(CursorGrabMode::None);
+            log::debug!("cursor released");
+        }
+    }
+
     pub fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::KeyboardInput {
@@ -139,8 +178,10 @@ impl State {
                         ..
                     },
                 ..
-            } => self.camera.controller.input.process_keyboard(*key, *state),
-            WindowEvent::MouseWheel { delta, .. } => {
+            } => self.camera.controller.process_keyboard(*key, *state),
+            WindowEvent::MouseWheel { delta, .. }
+                if self.camera.controller.is_captured() || !self.gui_wants_mouse() =>
+            {
                 self.camera.controller.handle_mouse_scroll(delta);
                 true
             }
@@ -148,28 +189,20 @@ impl State {
                 state,
                 button: MouseButton::Right,
                 ..
-            } => {
-                let mouse_pressed = *state == winit::event::ElementState::Pressed;
-                self.window.set_cursor_visible(!mouse_pressed);
-                self.camera.controller.set_captured(mouse_pressed);
-
-                if mouse_pressed {
-                    let _ = self
-                        .window
-                        .set_cursor_grab(CursorGrabMode::Locked)
-                        .or_else(|_| self.window.set_cursor_grab(CursorGrabMode::Confined));
-                    log::debug!("cursor captured");
-                } else {
-                    let _ = self.window.set_cursor_grab(CursorGrabMode::None);
-                    log::debug!("cursor released");
-                }
-
+            } if *state == ElementState::Pressed && !self.gui_wants_mouse() => {
+                self.set_camera_capture(true);
+                true
+            }
+            WindowEvent::MouseInput {
+                state,
+                button: MouseButton::Right,
+                ..
+            } if *state == ElementState::Released && self.camera.controller.is_captured() => {
+                self.set_camera_capture(false);
                 true
             }
             WindowEvent::Focused(false) => {
-                self.camera.controller.set_captured(false);
-                self.window.set_cursor_visible(true);
-                let _ = self.window.set_cursor_grab(CursorGrabMode::None);
+                self.set_camera_capture(false);
                 log::debug!("window lost focus, cursor released");
                 true
             }
@@ -231,6 +264,15 @@ impl State {
 
         self.scene
             .render(&mut encoder, &view, &self.camera.bind_group)?;
+
+        self.debug_gui.render(
+            &self.device,
+            &self.queue,
+            &mut encoder,
+            &view,
+            &self.window,
+            &mut self.camera.camera,
+        )?;
 
         self.queue.submit([encoder.finish()]);
         output.present();

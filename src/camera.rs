@@ -111,7 +111,6 @@ pub struct CameraInput {
     right: bool,
     up: bool,
     down: bool,
-    pub mouse_pressed: bool,
 }
 
 impl CameraInput {
@@ -152,7 +151,8 @@ impl CameraInput {
 
 #[derive(Debug, Default)]
 pub struct CameraController {
-    pub input: CameraInput,
+    input: CameraInput,
+    captured: bool,
     rot_hor: f32,
     rot_vert: f32,
     scroll: f32,
@@ -164,7 +164,7 @@ impl CameraController {
     }
 
     pub fn set_captured(&mut self, captured: bool) {
-        self.input.mouse_pressed = captured;
+        self.captured = captured;
 
         if !captured {
             self.input.clear();
@@ -172,7 +172,15 @@ impl CameraController {
     }
 
     pub fn is_captured(&self) -> bool {
-        self.input.mouse_pressed
+        self.captured
+    }
+
+    pub fn process_keyboard(&mut self, key: KeyCode, state: ElementState) -> bool {
+        if self.is_captured() {
+            self.input.process_keyboard(key, state)
+        } else {
+            false
+        }
     }
 
     pub fn handle_mouse(&mut self, mouse_dx: f64, mouse_dy: f64) {
@@ -193,7 +201,7 @@ impl CameraController {
         let dt = dt.as_secs_f32();
 
         let dir;
-        if self.input.mouse_pressed {
+        if self.is_captured() {
             camera.accel = (camera.accel - self.scroll * camera.scroll_sens * dt).clamp(0.0, 300.0);
             dir = self.input.movement_vector(camera);
         } else {
