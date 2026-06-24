@@ -48,7 +48,7 @@ impl State {
 
         let info = adapter.get_info();
         log::info!(
-            "using GPU '{}' ({:?}), driver: {} ({})",
+            "\ngpu: {}\nbackend: {}\ndriver: {} ({})\n",
             info.name,
             info.backend,
             info.driver,
@@ -76,7 +76,7 @@ impl State {
             .unwrap_or(surface_caps.formats[0]);
 
         log::debug!(
-            "surface capabilities: selected_format={:?}, present_modes={:?}, alpha_modes={:?}",
+            "surface capabilities:\nselected_format={:?}\npresent_modes={:?}\nalpha_modes={:?}",
             surface_format,
             surface_caps.present_modes,
             surface_caps.alpha_modes
