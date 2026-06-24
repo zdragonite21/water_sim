@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use winit::{
     event::{ElementState, KeyEvent, MouseButton, WindowEvent},
-    keyboard::PhysicalKey,
+    keyboard::{KeyCode, PhysicalKey},
     window::{CursorGrabMode, Window},
 };
 
 use crate::{camera::CameraRig, scene::DemoScene};
-use crate::{frame_clock::FrameClock, gui::DebugGui};
+use crate::{frame_clock::FrameClock, gui::Gui};
 
 pub struct State {
     pub window: Arc<Window>,
@@ -21,7 +21,7 @@ pub struct State {
     pub camera: CameraRig,
     scene: DemoScene,
     frame_clock: FrameClock,
-    debug_gui: DebugGui,
+    gui: Gui,
 }
 
 impl State {
@@ -101,7 +101,7 @@ impl State {
 
         let frame_clock = FrameClock::new();
 
-        let debug_gui = DebugGui::new(&device, &queue, &window, surface_format);
+        let gui = Gui::new(&device, &queue, &window, surface_format);
 
         Ok(Self {
             window,
@@ -113,7 +113,7 @@ impl State {
             camera,
             scene,
             frame_clock,
-            debug_gui,
+            gui,
         })
     }
 
@@ -134,15 +134,15 @@ impl State {
     }
 
     pub fn handle_event<T>(&mut self, event: &winit::event::Event<T>) {
-        self.debug_gui.handle_event(&self.window, event);
+        self.gui.handle_event(&self.window, event);
     }
 
     pub fn gui_wants_keyboard(&self) -> bool {
-        self.debug_gui.wants_keyboard()
+        self.gui.wants_keyboard()
     }
 
     pub fn gui_wants_mouse(&self) -> bool {
-        self.debug_gui.wants_mouse()
+        self.gui.wants_mouse()
     }
 
     fn set_camera_capture(&mut self, captured: bool) {
@@ -178,7 +178,9 @@ impl State {
                         ..
                     },
                 ..
-            } => self.camera.controller.process_keyboard(*key, *state),
+            } => {
+                self.camera.controller.process_keyboard(*key, *state) || self.handle_shortcut(event)
+            }
             WindowEvent::MouseWheel { delta, .. }
                 if self.camera.controller.is_captured() || !self.gui_wants_mouse() =>
             {
@@ -204,6 +206,33 @@ impl State {
             WindowEvent::Focused(false) => {
                 self.set_camera_capture(false);
                 log::debug!("window lost focus, cursor released");
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn handle_shortcut(&mut self, event: &WindowEvent) -> bool {
+        let WindowEvent::KeyboardInput {
+            event:
+                KeyEvent {
+                    physical_key: PhysicalKey::Code(key),
+                    state: ElementState::Pressed,
+                    ..
+                },
+            ..
+        } = event
+        else {
+            return false;
+        };
+
+        match key {
+            KeyCode::F12 => {
+                self.gui.debug.toggle();
+                true
+            }
+            KeyCode::KeyH => {
+                self.camera.camera.reset_view();
                 true
             }
             _ => false,
@@ -265,7 +294,7 @@ impl State {
         self.scene
             .render(&mut encoder, &view, &self.camera.bind_group)?;
 
-        self.debug_gui.render(
+        self.gui.render(
             &self.device,
             &self.queue,
             &mut encoder,

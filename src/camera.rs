@@ -26,30 +26,30 @@ pub struct Camera {
     pub scroll_sens: f32,
 }
 
-impl Camera {
-    pub fn new<V, Y, P>(
-        position: V,
-        yaw: Y,
-        pitch: P,
-        accel: f32,
-        damping: f32,
-        mouse_sens: f32,
-        scroll_sens: f32,
-    ) -> Self
-    where
-        V: Into<Point3<f32>>,
-        Y: Into<Rad<f32>>,
-        P: Into<Rad<f32>>,
-    {
+impl Default for Camera {
+    fn default() -> Self {
         Self {
-            position: position.into(),
-            yaw: yaw.into(),
-            pitch: pitch.into(),
+            position: Point3::new(0.0, 5.0, 10.0),
+            yaw: cgmath::Deg(-90.0).into(),
+            pitch: cgmath::Deg(-20.0).into(),
+            velocity: Vector3::zero(),
+            accel: 100.0,
+            damping: 5.0,
+            mouse_sens: 0.002,
+            scroll_sens: 0.3,
+        }
+    }
+}
+
+impl Camera {
+    pub fn new(accel: f32, damping: f32, mouse_sens: f32, scroll_sens: f32) -> Self {
+        Self {
             velocity: Vector3::zero(),
             accel,
             damping,
             mouse_sens,
             scroll_sens,
+            ..Self::default()
         }
     }
 
@@ -74,6 +74,16 @@ impl Camera {
 
     pub fn view_matrix(&self) -> Matrix4<f32> {
         Matrix4::look_to_rh(self.position, self.forward(), Vector3::unit_y())
+    }
+
+    pub fn reset_view(&mut self) {
+        *self = Self {
+            accel: self.accel,
+            damping: self.damping,
+            mouse_sens: self.mouse_sens,
+            scroll_sens: self.scroll_sens,
+            ..Self::default()
+        }
     }
 }
 
@@ -258,15 +268,7 @@ pub struct CameraRig {
 
 impl CameraRig {
     pub fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
-        let camera = Camera::new(
-            (0.0, 5.0, 10.0),
-            cgmath::Deg(-90.0),
-            cgmath::Deg(-20.0),
-            100.0,
-            5.0,
-            0.002,
-            0.3,
-        );
+        let camera = Camera::new(100.0, 5.0, 0.002, 0.3);
         let projection = Projection::new(width, height, cgmath::Deg(45.0), 0.1, 100.0);
         let controller = CameraController::new();
 

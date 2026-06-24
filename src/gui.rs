@@ -1,19 +1,18 @@
 use crate::camera::Camera;
-use imgui::Condition;
 use wgpu::{Device, Queue, TextureFormat};
 use winit::event::Event;
 use winit::window::Window;
 
-pub struct DebugGui {
+pub struct Gui {
     context: imgui::Context,
     platform: imgui_winit_support::WinitPlatform,
     renderer: imgui_wgpu::Renderer,
 
-    show_debug: bool,
-    show_camera: bool,
+    pub debug: DebugPanel,
+    pub camera: CameraPanel,
 }
 
-impl DebugGui {
+impl Gui {
     pub fn new(
         device: &Device,
         queue: &Queue,
@@ -42,8 +41,8 @@ impl DebugGui {
             context: imgui,
             platform,
             renderer,
-            show_debug: false,
-            show_camera: false,
+            debug: DebugPanel::new(),
+            camera: CameraPanel::new()
         }
     }
 
@@ -74,14 +73,9 @@ impl DebugGui {
         self.platform.prepare_frame(self.context.io_mut(), window)?;
 
         let ui = self.context.frame();
-        ui.window("Camera")
-            .size([280.0, 145.0], Condition::FirstUseEver)
-            .build(|| {
-                ui.slider("Acceleration", 0.0, 300.0, &mut camera.accel);
-                ui.slider("Damping", 0.0, 20.0, &mut camera.damping);
-                ui.slider("Mouse Sens", 0.0001, 0.02, &mut camera.mouse_sens);
-                ui.slider("Scroll Sens", 0.01, 2.0, &mut camera.scroll_sens);
-            });
+
+        self.debug.draw(ui);
+        self.camera.draw(ui, camera);
 
         self.platform.prepare_render(ui, window);
         let draw_data = self.context.render();
@@ -105,5 +99,58 @@ impl DebugGui {
             .render(draw_data, queue, device, &mut render_pass)?;
 
         Ok(())
+    }
+}
+
+pub struct DebugPanel {
+    pub open: bool,
+}
+
+impl DebugPanel {
+    pub fn new() -> Self {
+        Self { open: true }
+    }
+
+    pub fn toggle(&mut self) {
+        self.open = !self.open;
+    }
+
+    pub fn draw(&mut self, ui: &imgui::Ui) {
+        if !self.open {
+            return;
+        }
+
+        ui.window("Debug")
+            .opened(&mut self.open)
+            .size([260.0, 120.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                ui.text(format!("FPS: {:.1}", ui.io().framerate));
+            });
+    }
+}
+
+struct CameraPanel {
+    pub open: bool,
+}
+
+impl CameraPanel {
+    pub fn new() -> Self {
+        Self { open: true }
+    }
+    
+    pub fn draw(&mut self, ui: &imgui::Ui, camera: &mut Camera) {
+        if !self.open {
+            return;
+        }
+
+        ui.window("Camera")
+            .opened(&mut self.open)
+            .size([280.0, 145.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                ui.slider("Acceleration", 0.0, 300.0, &mut camera.accel);
+                ui.slider("Damping", 0.0, 20.0, &mut camera.damping);
+                ui.slider("Mouse Sens", 0.0001, 0.02, &mut camera.mouse_sens);
+                ui.slider("Scroll Sens", 0.01, 2.0, &mut camera.scroll_sens);
+            });
     }
 }
