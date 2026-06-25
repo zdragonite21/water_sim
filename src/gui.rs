@@ -8,8 +8,7 @@ pub struct Gui {
     platform: imgui_winit_support::WinitPlatform,
     renderer: imgui_wgpu::Renderer,
 
-    hud: FpsHud,
-    pub debug: DebugPanel,
+    debug_text: DebugText,
     camera: CameraPanel,
 }
 
@@ -42,8 +41,7 @@ impl Gui {
             context: imgui,
             platform,
             renderer,
-            hud: FpsHud::new(),
-            debug: DebugPanel::new(),
+            debug_text: DebugText::new(),
             camera: CameraPanel::new(),
         }
     }
@@ -63,6 +61,10 @@ impl Gui {
         io.want_capture_keyboard
     }
 
+    pub fn toggle_debug_text(&mut self) {
+        self.debug_text.toggle();
+    }
+
     pub fn render(
         &mut self,
         dt: instant::Duration,
@@ -78,8 +80,7 @@ impl Gui {
 
         let ui = self.context.frame();
 
-        self.hud.draw(ui);
-        self.debug.draw(ui);
+        self.debug_text.draw(ui);
         self.camera.draw(ui, camera);
 
         self.platform.prepare_render(ui, window);
@@ -107,20 +108,30 @@ impl Gui {
     }
 }
 
-struct FpsHud;
+struct DebugText {
+    open: bool,
+}
 
-impl FpsHud {
+impl DebugText {
     fn new() -> Self {
-        Self
+        Self { open: true }
+    }
+
+    fn toggle(&mut self) {
+        self.open = !self.open;
     }
 
     fn draw(&mut self, ui: &imgui::Ui) {
+        if !self.open {
+            return;
+        }
+
         let _window_bg = ui.push_style_color(imgui::StyleColor::WindowBg, [0.0, 0.0, 0.0, 0.0]);
         let _border = ui.push_style_color(imgui::StyleColor::Border, [0.0, 0.0, 0.0, 0.0]);
         let _padding = ui.push_style_var(imgui::StyleVar::WindowPadding([0.0, 0.0]));
         let _border_size = ui.push_style_var(imgui::StyleVar::WindowBorderSize(0.0));
 
-        ui.window("HUD")
+        ui.window("Debug Text")
             .position([10.0, 10.0], imgui::Condition::Always)
             .no_decoration()
             .no_inputs()
@@ -152,33 +163,6 @@ fn draw_text_with_background(ui: &imgui::Ui, text: &str) {
         .build();
 
     ui.text(text);
-}
-
-pub struct DebugPanel {
-    pub open: bool,
-}
-
-impl DebugPanel {
-    pub fn new() -> Self {
-        Self { open: true }
-    }
-
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-
-    pub fn draw(&mut self, ui: &imgui::Ui) {
-        if !self.open {
-            return;
-        }
-
-        ui.window("Debug")
-            .opened(&mut self.open)
-            .size([260.0, 120.0], imgui::Condition::FirstUseEver)
-            .build(|| {
-                ui.text("Debug controls");
-            });
-    }
 }
 
 pub struct CameraPanel {

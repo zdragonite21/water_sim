@@ -1,6 +1,5 @@
 pub mod app;
 mod camera;
-// mod config;
 mod config;
 mod frame_clock;
 mod gui;
