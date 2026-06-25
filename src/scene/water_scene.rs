@@ -1,6 +1,5 @@
 use crate::render::{
-    model::{Model, ModelVertex, Vertex},
-    resource,
+    model::{Mesh, SimpleVertex, Vertex},
     texture::Texture,
 };
 use cgmath::prelude::*;
@@ -8,7 +7,7 @@ use wgpu::util::DeviceExt;
 
 pub struct WaterScene {
     render_pipeline: wgpu::RenderPipeline,
-    obj_model: Model,
+    particle_display: Mesh,
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
     depth_texture: Texture,
@@ -17,41 +16,18 @@ pub struct WaterScene {
 impl WaterScene {
     pub async fn new(
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        _queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
     ) -> anyhow::Result<Self> {
         let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 
-        let shader = device.create_shader_module(wgpu::include_wgsl!("demo_scene.wgsl"));
-
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-                label: Some("texture_bind_group_layout"),
-            });
+        let shader = device.create_shader_module(wgpu::include_wgsl!("water_scene.wgsl"));
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[Some(&texture_bind_group_layout), Some(camera_layout)],
+                bind_group_layouts: &[Some(camera_layout)],
                 immediate_size: 0,
             });
 
@@ -61,7 +37,7 @@ impl WaterScene {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[ModelVertex::desc(), InstanceRaw::desc()],
+                buffers: &[SimpleVertex::desc(), InstanceRaw::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -101,8 +77,7 @@ impl WaterScene {
 
         log::debug!("demo scene render pipeline created");
 
-        let obj_model =
-            resource::load_model("cube.obj", device, queue, &texture_bind_group_layout).await?;
+        let particle_display = Mesh::square(device);
 
         let instances = create_instances();
 
@@ -116,7 +91,7 @@ impl WaterScene {
 
         Ok(Self {
             render_pipeline,
-            obj_model,
+            particle_display,
             instances,
             instance_buffer,
             depth_texture,
@@ -167,12 +142,16 @@ impl WaterScene {
 
         render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
         render_pass.set_pipeline(&self.render_pipeline);
-
-        use crate::render::model::DrawModel;
-        render_pass.draw_model_instanced(
-            &self.obj_model,
+        render_pass.set_bind_group(0, camera_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, self.particle_display.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(
+            self.particle_display.index_buffer.slice(..),
+            wgpu::IndexFormat::Uint32,
+        );
+        render_pass.draw_indexed(
+            0..self.particle_display.num_elements,
+            0,
             0..self.instances.len() as u32,
-            camera_bind_group,
         );
 
         drop(render_pass);
@@ -219,23 +198,20 @@ fn create_instances() -> Vec<Instance> {
     const NUM_INSTANCES_PER_ROW: u32 = 10;
     const SPACE_BETWEEN: f32 = 3.0;
     let instances = (0..NUM_INSTANCES_PER_ROW)
-            .flat_map(|z| {
-                (0..NUM_INSTANCES_PER_ROW).map(move |x| {
-                    let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                    let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                    let position = cgmath::Vector3 { x, y: 0.0, z };
-                    let rotation = if position.is_zero() {
-                        cgmath::Quaternion::from_axis_angle(
-                            cgmath::Vector3::unit_z(),
-                            cgmath::Deg(0.0),
-                        )
-                    } else {
-                        cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
-                    };
+        .flat_map(|z| {
+            (0..NUM_INSTANCES_PER_ROW).map(move |x| {
+                let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+                let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+                let position = cgmath::Vector3 { x, y: 0.0, z };
+                let rotation = if position.is_zero() {
+                    cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
+                } else {
+                    cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
+                };
 
-                    Instance { position, rotation }
-                })
+                Instance { position, rotation }
             })
-            .collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
     instances
 }

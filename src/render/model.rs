@@ -1,9 +1,30 @@
-use std::ops::Range;
-
 use super::texture::Texture;
+use cgmath::Vector3;
+use std::ops::Range;
+use wgpu::util::DeviceExt;
 
 pub trait Vertex {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct SimpleVertex {
+    pub position: [f32; 3],
+}
+
+impl SimpleVertex {
+    const ATTRIBS: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![0 => Float32x3];
+}
+
+impl Vertex for SimpleVertex {
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &Self::ATTRIBS,
+        }
+    }
 }
 
 #[repr(C)]
@@ -48,6 +69,53 @@ pub struct Mesh {
     pub index_buffer: wgpu::Buffer,
     pub num_elements: u32,
     pub material: usize,
+}
+
+impl Mesh {
+    pub fn new<V>(name: String, vertices: &[V], indices: &[u32], device: &wgpu::Device) -> Self
+    where
+        V: Copy + Into<Vector3<f32>>,
+    {
+        let mut simple_verts = Vec::<SimpleVertex>::new();
+
+        for v in vertices {
+            let pos: Vector3<f32> = (*v).into();
+            simple_verts.push(SimpleVertex {
+                position: [pos.x, pos.y, pos.z],
+            });
+        }
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(&format!("{:?} Vertex Buffer", name)),
+            contents: bytemuck::cast_slice(&simple_verts),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some(&format!("{:?} Index Buffer", name)),
+            contents: bytemuck::cast_slice(&indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        Self {
+            name: name,
+            vertex_buffer,
+            index_buffer,
+            num_elements: indices.len() as u32,
+            material: 0,
+        }
+    }
+
+    pub fn square(device: &wgpu::Device) -> Self {
+        let vertices = [
+            (-0.5, -0.5, 0.0),
+            (0.5, -0.5, 0.0),
+            (0.5, 0.5, 0.0),
+            (-0.5, 0.5, 0.0),
+        ];
+        let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
+
+        Self::new(String::from("square"), &vertices, &indices, device)
+    }
 }
 
 #[allow(unused)]
