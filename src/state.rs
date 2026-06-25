@@ -7,7 +7,7 @@ use winit::{
     window::{CursorGrabMode, Window},
 };
 
-use crate::{camera::CameraRig, config::AppConfig, scene::demo_scene::DemoScene};
+use crate::{camera::CameraRig, config::AppConfig, scene::water_scene::WaterScene};
 use crate::{frame_clock::FrameClock, gui::Gui};
 
 pub struct State {
@@ -19,7 +19,7 @@ pub struct State {
     is_surface_configured: bool,
 
     pub camera: CameraRig,
-    scene: DemoScene,
+    scene: WaterScene,
     frame_clock: FrameClock,
     gui: Gui,
 }
@@ -96,8 +96,8 @@ impl State {
 
         let camera = CameraRig::new(&device, config.width, config.height, &app_config.camera);
 
-        let scene = DemoScene::new(&device, &queue, &config, &camera.bind_group_layout).await?;
-        log::debug!("demo scene created");
+        let scene = WaterScene::new(&device, &queue, &config, &camera.bind_group_layout).await?;
+        log::debug!("water scene created");
 
         let frame_clock = FrameClock::new();
 
