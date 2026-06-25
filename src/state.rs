@@ -7,7 +7,7 @@ use winit::{
     window::{CursorGrabMode, Window},
 };
 
-use crate::{camera::CameraRig, config::AppConfig, scene::DemoScene};
+use crate::{camera::CameraRig, config::AppConfig, scene::demo_scene::DemoScene};
 use crate::{frame_clock::FrameClock, gui::Gui};
 
 pub struct State {

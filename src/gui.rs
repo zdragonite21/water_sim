@@ -139,12 +139,12 @@ impl DebugText {
             .draw_background(false)
             .save_settings(false)
             .build(|| {
-                draw_text_with_background(ui, &format!("FPS: {:.1}", ui.io().framerate));
+                draw_text_with_bg(ui, &format!("FPS: {:.1}", ui.io().framerate));
             });
     }
 }
 
-fn draw_text_with_background(ui: &imgui::Ui, text: &str) {
+fn draw_text_with_bg(ui: &imgui::Ui, text: &str) {
     let text_size = ui.calc_text_size(text);
     let cursor_pos = ui.cursor_screen_pos();
     let padding = [4.0, 0.0];

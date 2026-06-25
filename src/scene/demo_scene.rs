@@ -6,8 +6,6 @@ use crate::render::{
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
 
-const NUM_INSTANCES_PER_ROW: u32 = 10;
-
 pub struct DemoScene {
     render_pipeline: wgpu::RenderPipeline,
     obj_model: Model,
@@ -25,7 +23,7 @@ impl DemoScene {
     ) -> anyhow::Result<Self> {
         let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 
-        let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+        let shader = device.create_shader_module(wgpu::include_wgsl!("demo_scene.wgsl"));
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -106,26 +104,7 @@ impl DemoScene {
         let obj_model =
             resource::load_model("cube.obj", device, queue, &texture_bind_group_layout).await?;
 
-        const SPACE_BETWEEN: f32 = 3.0;
-        let instances = (0..NUM_INSTANCES_PER_ROW)
-            .flat_map(|z| {
-                (0..NUM_INSTANCES_PER_ROW).map(move |x| {
-                    let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                    let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                    let position = cgmath::Vector3 { x, y: 0.0, z };
-                    let rotation = if position.is_zero() {
-                        cgmath::Quaternion::from_axis_angle(
-                            cgmath::Vector3::unit_z(),
-                            cgmath::Deg(0.0),
-                        )
-                    } else {
-                        cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
-                    };
-
-                    Instance { position, rotation }
-                })
-            })
-            .collect::<Vec<_>>();
+        let instances = create_instances();
 
         let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
         let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -234,4 +213,29 @@ impl InstanceRaw {
             attributes: &Self::ATTRIBS,
         }
     }
+}
+
+fn create_instances() -> Vec<Instance> {
+    const NUM_INSTANCES_PER_ROW: u32 = 10;
+    const SPACE_BETWEEN: f32 = 3.0;
+    let instances = (0..NUM_INSTANCES_PER_ROW)
+            .flat_map(|z| {
+                (0..NUM_INSTANCES_PER_ROW).map(move |x| {
+                    let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+                    let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
+                    let position = cgmath::Vector3 { x, y: 0.0, z };
+                    let rotation = if position.is_zero() {
+                        cgmath::Quaternion::from_axis_angle(
+                            cgmath::Vector3::unit_z(),
+                            cgmath::Deg(0.0),
+                        )
+                    } else {
+                        cgmath::Quaternion::from_axis_angle(position.normalize(), cgmath::Deg(45.0))
+                    };
+
+                    Instance { position, rotation }
+                })
+            })
+            .collect::<Vec<_>>();
+    instances
 }
