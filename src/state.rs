@@ -178,9 +178,7 @@ impl State {
                         ..
                     },
                 ..
-            } => {
-                self.camera.controller.process_keyboard(*key, *state)
-            }
+            } => self.camera.controller.process_keyboard(*key, *state),
             WindowEvent::MouseWheel { delta, .. }
                 if self.camera.controller.is_captured() || !self.gui_wants_mouse() =>
             {

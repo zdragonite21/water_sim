@@ -270,7 +270,12 @@ pub struct CameraRig {
 
 impl CameraRig {
     pub fn new(device: &wgpu::Device, width: u32, height: u32, config: &CameraConfig) -> Self {
-        let camera = Camera::new(config.accel, config.damping, config.mouse_sens, config.scroll_sens);
+        let camera = Camera::new(
+            config.accel,
+            config.damping,
+            config.mouse_sens,
+            config.scroll_sens,
+        );
         let projection = Projection::new(width, height, cgmath::Deg(45.0), 0.1, 100.0);
         let controller = CameraController::new();
 

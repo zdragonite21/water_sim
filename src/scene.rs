@@ -1,6 +1,6 @@
 use crate::render::{
-    resource,
     model::{Model, ModelVertex, Vertex},
+    resource,
     texture::Texture,
 };
 use cgmath::prelude::*;
@@ -201,7 +201,6 @@ impl DemoScene {
         Ok(())
     }
 }
-
 
 struct Instance {
     position: cgmath::Vector3<f32>,

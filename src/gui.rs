@@ -8,8 +8,9 @@ pub struct Gui {
     platform: imgui_winit_support::WinitPlatform,
     renderer: imgui_wgpu::Renderer,
 
+    hud: FpsHud,
     pub debug: DebugPanel,
-    pub camera: CameraPanel,
+    camera: CameraPanel,
 }
 
 impl Gui {
@@ -41,8 +42,9 @@ impl Gui {
             context: imgui,
             platform,
             renderer,
+            hud: FpsHud::new(),
             debug: DebugPanel::new(),
-            camera: CameraPanel::new()
+            camera: CameraPanel::new(),
         }
     }
 
@@ -74,9 +76,9 @@ impl Gui {
         self.context.io_mut().update_delta_time(dt);
         self.platform.prepare_frame(self.context.io_mut(), window)?;
 
-
         let ui = self.context.frame();
 
+        self.hud.draw(ui);
         self.debug.draw(ui);
         self.camera.draw(ui, camera);
 
@@ -105,6 +107,53 @@ impl Gui {
     }
 }
 
+struct FpsHud;
+
+impl FpsHud {
+    fn new() -> Self {
+        Self
+    }
+
+    fn draw(&mut self, ui: &imgui::Ui) {
+        let _window_bg = ui.push_style_color(imgui::StyleColor::WindowBg, [0.0, 0.0, 0.0, 0.0]);
+        let _border = ui.push_style_color(imgui::StyleColor::Border, [0.0, 0.0, 0.0, 0.0]);
+        let _padding = ui.push_style_var(imgui::StyleVar::WindowPadding([0.0, 0.0]));
+        let _border_size = ui.push_style_var(imgui::StyleVar::WindowBorderSize(0.0));
+
+        ui.window("HUD")
+            .position([10.0, 10.0], imgui::Condition::Always)
+            .no_decoration()
+            .no_inputs()
+            .always_auto_resize(true)
+            .draw_background(false)
+            .save_settings(false)
+            .build(|| {
+                draw_text_with_background(ui, &format!("FPS: {:.1}", ui.io().framerate));
+            });
+    }
+}
+
+fn draw_text_with_background(ui: &imgui::Ui, text: &str) {
+    let text_size = ui.calc_text_size(text);
+    let cursor_pos = ui.cursor_screen_pos();
+    let padding = [4.0, 0.0];
+    let background_max = [
+        cursor_pos[0] + text_size[0] + padding[0],
+        cursor_pos[1] + text_size[1] + padding[1],
+    ];
+
+    ui.get_window_draw_list()
+        .add_rect(
+            cursor_pos,
+            background_max,
+            imgui::ImColor32::from_rgba(0, 0, 0, 127),
+        )
+        .filled(true)
+        .build();
+
+    ui.text(text);
+}
+
 pub struct DebugPanel {
     pub open: bool,
 }
@@ -127,12 +176,12 @@ impl DebugPanel {
             .opened(&mut self.open)
             .size([260.0, 120.0], imgui::Condition::FirstUseEver)
             .build(|| {
-                ui.text(format!("FPS: {:.1}", ui.io().framerate));
+                ui.text("Debug controls");
             });
     }
 }
 
-struct CameraPanel {
+pub struct CameraPanel {
     pub open: bool,
 }
 
@@ -140,7 +189,7 @@ impl CameraPanel {
     pub fn new() -> Self {
         Self { open: true }
     }
-    
+
     pub fn draw(&mut self, ui: &imgui::Ui, camera: &mut Camera) {
         if !self.open {
             return;
