@@ -187,10 +187,7 @@ impl CameraPanel {
             .opened(&mut self.open)
             .size([280.0, 145.0], imgui::Condition::FirstUseEver)
             .build(|| {
-                F32Field::new("Acceleration", 0.0, 300.0).draw(ui, &mut camera.settings.accel);
-                F32Field::new("Damping", 0.0, 20.0).draw(ui, &mut camera.settings.damping);
-                F32Field::new("Mouse Sens", 0.0001, 0.02).draw(ui, &mut camera.settings.mouse_sens);
-                F32Field::new("Scroll Sens", 0.01, 2.0).draw(ui, &mut camera.settings.scroll_sens);
+                camera.settings.inspect(ui);
             });
     }
 }
@@ -215,21 +212,5 @@ impl WaterPanel {
             .build(|| {
                 water.inspect(ui);
             });
-    }
-}
-
-struct F32Field {
-    label: &'static str,
-    min: f32,
-    max: f32,
-}
-
-impl F32Field {
-    fn new(label: &'static str, min: f32, max: f32) -> Self {
-        Self { label, min, max }
-    }
-
-    fn draw(&self, ui: &imgui::Ui, value: &mut f32) {
-        ui.slider(self.label, self.min, self.max, value);
     }
 }

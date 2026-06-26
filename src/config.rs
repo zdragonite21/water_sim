@@ -14,27 +14,9 @@ pub struct AppConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CameraConfig {
-    pub accel: f32,
-    pub damping: f32,
-    pub mouse_sens: f32,
-    pub scroll_sens: f32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowConfig {
     pub width: u32,
     pub height: u32,
-}
-
-inspect_config! {
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    #[serde(default)]
-    pub struct WaterConfig {
-        gravity: f32 = 9.81;
-        particle_size: f32 = 1.0, 0.05, 5.0;
-        show_particles: bool = true;
-    }
 }
 
 impl Default for AppConfig {
@@ -43,17 +25,6 @@ impl Default for AppConfig {
             camera: CameraConfig::default(),
             window: WindowConfig::default(),
             water: WaterConfig::default(),
-        }
-    }
-}
-
-impl Default for CameraConfig {
-    fn default() -> Self {
-        Self {
-            accel: 100.0,
-            damping: 5.0,
-            mouse_sens: 0.005,
-            scroll_sens: 0.1,
         }
     }
 }
@@ -87,5 +58,26 @@ impl AppConfig {
         let text = toml::to_string_pretty(self)?;
         std::fs::write(path.as_ref(), text)
             .with_context(|| format!("failed to write {}", path.as_ref().display()))
+    }
+}
+
+inspect_config! {
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[serde(default)]
+    pub struct CameraConfig {
+        accel: f32 = 100.0, 0.0, 300.0;
+        damping: f32 = 5.0, 0.0, 20.0;
+        mouse_sens: f32 = 0.005, 0.001, 0.02;
+        scroll_sens: f32 = 0.1, 0.01, 2.0;
+    }
+}
+
+inspect_config! {
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[serde(default)]
+    pub struct WaterConfig {
+        gravity: f32 = 9.81;
+        particle_size: f32 = 1.0, 0.05, 5.0;
+        show_particles: bool = true;
     }
 }
