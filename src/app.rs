@@ -15,7 +15,7 @@ use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::EventLoopExtWebSys;
 
-const CONFIG_FILE: &str = "config.toml";
+const CONFIG_FILE: &str = "game_config.toml";
 
 pub struct App {
     #[cfg(target_arch = "wasm32")]
