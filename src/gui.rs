@@ -24,7 +24,7 @@ impl Gui {
         platform.attach_window(
             imgui.io_mut(),
             window,
-            imgui_winit_support::HiDpiMode::Default,
+            imgui_winit_support::HiDpiMode::Rounded,
         );
 
         let renderer = imgui_wgpu::Renderer::new(
