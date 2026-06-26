@@ -1,10 +1,10 @@
 [package]
-name = "water_sim"
+name = "katara"
 version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "water_sim_app"
+name = "katara_engine"
 path = "src/main.rs"
 
 [profile.release]
