@@ -1,4 +1,4 @@
-use crate::camera::Camera;
+use crate::{camera::Camera, config::WaterConfig};
 use wgpu::{Device, Queue, TextureFormat};
 use winit::event::Event;
 use winit::window::Window;
@@ -10,6 +10,7 @@ pub struct Gui {
 
     debug_text: DebugText,
     camera: CameraPanel,
+    water: WaterPanel,
 }
 
 impl Gui {
@@ -43,6 +44,7 @@ impl Gui {
             renderer,
             debug_text: DebugText::new(),
             camera: CameraPanel::new(),
+            water: WaterPanel::new(),
         }
     }
 
@@ -74,6 +76,7 @@ impl Gui {
         target_view: &wgpu::TextureView,
         window: &Window,
         camera: &mut Camera,
+        water: &mut WaterConfig,
     ) -> anyhow::Result<()> {
         self.context.io_mut().update_delta_time(dt);
         self.platform.prepare_frame(self.context.io_mut(), window)?;
@@ -82,6 +85,7 @@ impl Gui {
 
         self.debug_text.draw(ui);
         self.camera.draw(ui, camera);
+        self.water.draw(ui, water);
 
         self.platform.prepare_render(ui, window);
         let draw_data = self.context.render();
@@ -183,10 +187,50 @@ impl CameraPanel {
             .opened(&mut self.open)
             .size([280.0, 145.0], imgui::Condition::FirstUseEver)
             .build(|| {
-                ui.slider("Acceleration", 0.0, 300.0, &mut camera.accel);
-                ui.slider("Damping", 0.0, 20.0, &mut camera.damping);
-                ui.slider("Mouse Sens", 0.0001, 0.02, &mut camera.mouse_sens);
-                ui.slider("Scroll Sens", 0.01, 2.0, &mut camera.scroll_sens);
+                F32Field::new("Acceleration", 0.0, 300.0).draw(ui, &mut camera.settings.accel);
+                F32Field::new("Damping", 0.0, 20.0).draw(ui, &mut camera.settings.damping);
+                F32Field::new("Mouse Sens", 0.0001, 0.02).draw(ui, &mut camera.settings.mouse_sens);
+                F32Field::new("Scroll Sens", 0.01, 2.0).draw(ui, &mut camera.settings.scroll_sens);
             });
+    }
+}
+
+pub struct WaterPanel {
+    pub open: bool,
+}
+
+impl WaterPanel {
+    pub fn new() -> Self {
+        Self { open: true }
+    }
+
+    pub fn draw(&mut self, ui: &imgui::Ui, water: &mut WaterConfig) {
+        if !self.open {
+            return;
+        }
+
+        ui.window("Water")
+            .opened(&mut self.open)
+            .size([280.0, 95.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                F32Field::new("Gravity", 0.0, 30.0).draw(ui, &mut water.gravity);
+                F32Field::new("Particle Size", 0.05, 5.0).draw(ui, &mut water.particle_size);
+            });
+    }
+}
+
+struct F32Field {
+    label: &'static str,
+    min: f32,
+    max: f32,
+}
+
+impl F32Field {
+    fn new(label: &'static str, min: f32, max: f32) -> Self {
+        Self { label, min, max }
+    }
+
+    fn draw(&self, ui: &imgui::Ui, value: &mut f32) {
+        ui.slider(self.label, self.min, self.max, value);
     }
 }

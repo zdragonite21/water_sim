@@ -1,6 +1,9 @@
-use crate::render::{
-    model::{Mesh, SimpleVertex, Vertex},
-    texture::Texture,
+use crate::{
+    config::WaterConfig,
+    render::{
+        model::{Mesh, SimpleVertex, Vertex},
+        texture::Texture,
+    },
 };
 use cgmath::prelude::*;
 use wgpu::util::DeviceExt;
@@ -11,6 +14,7 @@ pub struct WaterScene {
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
     depth_texture: Texture,
+    config: WaterConfig,
 }
 
 impl WaterScene {
@@ -19,6 +23,7 @@ impl WaterScene {
         _queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
+        water_config: &WaterConfig,
     ) -> anyhow::Result<Self> {
         let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 
@@ -95,6 +100,7 @@ impl WaterScene {
             instances,
             instance_buffer,
             depth_texture,
+            config: water_config.clone(),
         })
     }
 
@@ -105,6 +111,14 @@ impl WaterScene {
 
     pub fn update(&mut self, _dt: instant::Duration) {
         ()
+    }
+
+    pub fn config_mut(&mut self) -> &mut WaterConfig {
+        &mut self.config
+    }
+
+    pub fn current_config(&self) -> WaterConfig {
+        self.config.clone()
     }
 
     pub fn render(

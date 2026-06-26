@@ -1,9 +1,13 @@
 [camera]
-accel = 100.0
-damping = 5.0
-mouse_sens = 0.004999999888241291
+accel = 212.6359405517578
+damping = 8.312999725341797
+mouse_sens = 0.0020000000949949026
 scroll_sens = 0.10000000149011612
 
 [window]
 width = 1708
 height = 1180
+
+[water]
+gravity = 9.8100004196167
+particle_size = 0.7319999933242798

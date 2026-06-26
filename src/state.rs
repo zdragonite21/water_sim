@@ -100,7 +100,14 @@ impl State {
 
         let camera = CameraRig::new(&device, config.width, config.height, &app_config.camera);
 
-        let scene = WaterScene::new(&device, &queue, &config, &camera.bind_group_layout).await?;
+        let scene = WaterScene::new(
+            &device,
+            &queue,
+            &config,
+            &camera.bind_group_layout,
+            &app_config.water,
+        )
+        .await?;
         log::debug!("water scene created");
 
         let frame_clock = FrameClock::new();
@@ -304,6 +311,7 @@ impl State {
             &view,
             &self.window,
             &mut self.camera.camera,
+            self.scene.config_mut(),
         )?;
 
         self.queue.submit([encoder.finish()]);
@@ -330,6 +338,7 @@ impl State {
                 width: self.config.width,
                 height: self.config.height,
             },
+            water: self.scene.current_config(),
         }
     }
 }

@@ -22,10 +22,7 @@ pub struct Camera {
     pub yaw: Rad<f32>,
     pub pitch: Rad<f32>,
     pub velocity: Vector3<f32>,
-    pub accel: f32,
-    pub damping: f32,
-    pub mouse_sens: f32,
-    pub scroll_sens: f32,
+    pub settings: CameraConfig,
 }
 
 impl Default for Camera {
@@ -35,22 +32,16 @@ impl Default for Camera {
             yaw: cgmath::Deg(-90.0).into(),
             pitch: cgmath::Deg(-20.0).into(),
             velocity: Vector3::zero(),
-            accel: 100.0,
-            damping: 5.0,
-            mouse_sens: 0.002,
-            scroll_sens: 0.3,
+            settings: CameraConfig::default(),
         }
     }
 }
 
 impl Camera {
-    pub fn new(accel: f32, damping: f32, mouse_sens: f32, scroll_sens: f32) -> Self {
+    pub fn new(settings: CameraConfig) -> Self {
         Self {
             velocity: Vector3::zero(),
-            accel,
-            damping,
-            mouse_sens,
-            scroll_sens,
+            settings,
             ..Self::default()
         }
     }
@@ -80,10 +71,7 @@ impl Camera {
 
     pub fn reset_view(&mut self) {
         *self = Self {
-            accel: self.accel,
-            damping: self.damping,
-            mouse_sens: self.mouse_sens,
-            scroll_sens: self.scroll_sens,
+            settings: self.settings.clone(),
             ..Self::default()
         }
     }
@@ -214,19 +202,21 @@ impl CameraController {
 
         let dir;
         if self.is_captured() {
-            camera.accel = (camera.accel - self.scroll * camera.scroll_sens * dt).clamp(0.0, 300.0);
+            camera.settings.accel = (camera.settings.accel
+                - self.scroll * camera.settings.scroll_sens * dt)
+                .clamp(0.0, 300.0);
             dir = self.input.movement_vector(camera);
         } else {
-            camera.position += camera.forward() * -self.scroll * camera.scroll_sens * dt;
+            camera.position += camera.forward() * -self.scroll * camera.settings.scroll_sens * dt;
             dir = Vector3::zero();
         }
 
-        camera.velocity += dir * camera.accel * dt;
-        camera.velocity *= (-camera.damping * dt).exp();
+        camera.velocity += dir * camera.settings.accel * dt;
+        camera.velocity *= (-camera.settings.damping * dt).exp();
         camera.position += camera.velocity * dt;
 
-        camera.yaw += Rad(-self.rot_hor) * camera.mouse_sens;
-        camera.pitch += Rad(-self.rot_vert) * camera.mouse_sens;
+        camera.yaw += Rad(-self.rot_hor) * camera.settings.mouse_sens;
+        camera.pitch += Rad(-self.rot_vert) * camera.settings.mouse_sens;
         camera.pitch = Rad(camera.pitch.0.clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2));
 
         self.reset_frame_input();
@@ -273,12 +263,7 @@ pub struct CameraRig {
 
 impl CameraRig {
     pub fn new(device: &wgpu::Device, width: u32, height: u32, config: &CameraConfig) -> Self {
-        let camera = Camera::new(
-            config.accel,
-            config.damping,
-            config.mouse_sens,
-            config.scroll_sens,
-        );
+        let camera = Camera::new(config.clone());
         let projection = Projection::new(width, height, cgmath::Deg(45.0), 0.1, 100.0);
         let controller = CameraController::new();
 
@@ -338,11 +323,6 @@ impl CameraRig {
     }
 
     pub fn current_config(&self) -> CameraConfig {
-        CameraConfig {
-            accel: self.camera.accel,
-            damping: self.camera.damping,
-            mouse_sens: self.camera.mouse_sens,
-            scroll_sens: self.camera.scroll_sens,
-        }
+        self.camera.settings.clone()
     }
 }

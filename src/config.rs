@@ -4,8 +4,12 @@ use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
+    #[serde(default)]
     pub camera: CameraConfig,
+    #[serde(default)]
     pub window: WindowConfig,
+    #[serde(default)]
+    pub water: WaterConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,11 +26,18 @@ pub struct WindowConfig {
     pub height: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WaterConfig {
+    pub gravity: f32,
+    pub particle_size: f32,
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             camera: CameraConfig::default(),
             window: WindowConfig::default(),
+            water: WaterConfig::default(),
         }
     }
 }
@@ -47,6 +58,15 @@ impl Default for WindowConfig {
         Self {
             width: 1280,
             height: 720,
+        }
+    }
+}
+
+impl Default for WaterConfig {
+    fn default() -> Self {
+        Self {
+            gravity: 9.81,
+            particle_size: 1.0,
         }
     }
 }
