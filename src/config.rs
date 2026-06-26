@@ -1,3 +1,4 @@
+use crate::inspect::inspect_config;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -26,10 +27,14 @@ pub struct WindowConfig {
     pub height: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WaterConfig {
-    pub gravity: f32,
-    pub particle_size: f32,
+inspect_config! {
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[serde(default)]
+    pub struct WaterConfig {
+        gravity: f32 = 9.81;
+        particle_size: f32 = 1.0, 0.05, 5.0;
+        show_particles: bool = true;
+    }
 }
 
 impl Default for AppConfig {
@@ -58,15 +63,6 @@ impl Default for WindowConfig {
         Self {
             width: 1280,
             height: 720,
-        }
-    }
-}
-
-impl Default for WaterConfig {
-    fn default() -> Self {
-        Self {
-            gravity: 9.81,
-            particle_size: 1.0,
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::{camera::Camera, config::WaterConfig};
+use crate::{camera::Camera, config::WaterConfig, inspect::Inspect};
 use wgpu::{Device, Queue, TextureFormat};
 use winit::event::Event;
 use winit::window::Window;
@@ -213,8 +213,7 @@ impl WaterPanel {
             .opened(&mut self.open)
             .size([280.0, 95.0], imgui::Condition::FirstUseEver)
             .build(|| {
-                F32Field::new("Gravity", 0.0, 30.0).draw(ui, &mut water.gravity);
-                F32Field::new("Particle Size", 0.05, 5.0).draw(ui, &mut water.particle_size);
+                water.inspect(ui);
             });
     }
 }
