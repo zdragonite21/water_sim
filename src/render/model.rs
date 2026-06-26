@@ -1,5 +1,5 @@
 use super::texture::Texture;
-use cgmath::Vector3;
+use cgmath::{Vector2, Vector3};
 use std::ops::Range;
 use wgpu::util::DeviceExt;
 
@@ -11,10 +11,11 @@ pub trait Vertex {
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct SimpleVertex {
     pub position: [f32; 3],
+    pub uv: [f32; 2],
 }
 
 impl SimpleVertex {
-    const ATTRIBS: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![0 => Float32x3];
+    const ATTRIBS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
 }
 
 impl Vertex for SimpleVertex {
@@ -72,16 +73,19 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new<V>(name: String, vertices: &[V], indices: &[u32], device: &wgpu::Device) -> Self
+    pub fn new<V, U>(name: String, vertices: &[V], indices: &[u32], uvs: &[U], device: &wgpu::Device) -> Self
     where
         V: Copy + Into<Vector3<f32>>,
+        U: Copy + Into<Vector2<f32>>,
     {
         let mut simple_verts = Vec::<SimpleVertex>::new();
 
-        for v in vertices {
-            let pos: Vector3<f32> = (*v).into();
+        for i in 0..vertices.len() {
+            let pos: Vector3<f32> = vertices[i].into();
+            let uv_coords: Vector2<f32> = uvs[i].into();
             simple_verts.push(SimpleVertex {
                 position: [pos.x, pos.y, pos.z],
+                uv: [uv_coords.x, uv_coords.y],
             });
         }
 
@@ -113,8 +117,14 @@ impl Mesh {
             (-0.5, 0.5, 0.0),
         ];
         let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
+        let uvs = [
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+            (0.0, 1.0),
+        ];
 
-        Self::new(String::from("square"), &vertices, &indices, device)
+        Self::new(String::from("square"), &vertices, &indices, &uvs, device)
     }
 }
 
