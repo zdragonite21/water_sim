@@ -7,7 +7,11 @@ use winit::{
     window::{CursorGrabMode, Window},
 };
 
-use crate::{camera::CameraRig, config::AppConfig, scene::water_scene::WaterScene};
+use crate::{
+    camera::CameraRig,
+    config::{AppConfig, WindowConfig},
+    scene::water_scene::WaterScene,
+};
 use crate::{frame_clock::FrameClock, gui::Gui};
 
 pub struct State {
@@ -322,6 +326,10 @@ impl State {
     pub fn current_config(&self) -> AppConfig {
         AppConfig {
             camera: self.camera.current_config(),
+            window: WindowConfig {
+                width: self.config.width,
+                height: self.config.height,
+            },
         }
     }
 }

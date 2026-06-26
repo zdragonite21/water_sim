@@ -55,7 +55,9 @@ impl App {
 impl ApplicationHandler<State> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         #[allow(unused_mut)]
-        let mut window_attributes = Window::default_attributes();
+        let mut window_attributes = Window::default_attributes().with_inner_size(
+            winit::dpi::PhysicalSize::new(self.config.window.width, self.config.window.height),
+        );
 
         #[cfg(target_arch = "wasm32")]
         {

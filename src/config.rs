@@ -5,6 +5,7 @@ use std::path::Path;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub camera: CameraConfig,
+    pub window: WindowConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,10 +16,17 @@ pub struct CameraConfig {
     pub scroll_sens: f32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WindowConfig {
+    pub width: u32,
+    pub height: u32,
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
             camera: CameraConfig::default(),
+            window: WindowConfig::default(),
         }
     }
 }
@@ -30,6 +38,15 @@ impl Default for CameraConfig {
             damping: 5.0,
             mouse_sens: 0.005,
             scroll_sens: 0.1,
+        }
+    }
+}
+
+impl Default for WindowConfig {
+    fn default() -> Self {
+        Self {
+            width: 1280,
+            height: 720,
         }
     }
 }

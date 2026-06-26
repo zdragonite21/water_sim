@@ -15,7 +15,8 @@ pub struct SimpleVertex {
 }
 
 impl SimpleVertex {
-    const ATTRIBS: [wgpu::VertexAttribute; 2] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
+    const ATTRIBS: [wgpu::VertexAttribute; 2] =
+        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
 }
 
 impl Vertex for SimpleVertex {
@@ -73,7 +74,13 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new<V, U>(name: String, vertices: &[V], indices: &[u32], uvs: &[U], device: &wgpu::Device) -> Self
+    pub fn new<V, U>(
+        name: String,
+        vertices: &[V],
+        indices: &[u32],
+        uvs: &[U],
+        device: &wgpu::Device,
+    ) -> Self
     where
         V: Copy + Into<Vector3<f32>>,
         U: Copy + Into<Vector2<f32>>,
@@ -117,12 +124,7 @@ impl Mesh {
             (-0.5, 0.5, 0.0),
         ];
         let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
-        let uvs = [
-            (0.0, 0.0),
-            (1.0, 0.0),
-            (1.0, 1.0),
-            (0.0, 1.0),
-        ];
+        let uvs = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)];
 
         Self::new(String::from("square"), &vertices, &indices, &uvs, device)
     }

@@ -1,5 +1,9 @@
 [camera]
-accel = 251.2050018310547
-damping = 8.265999794006348
-mouse_sens = 0.0020000000949949026
-scroll_sens = 0.30000001192092896
+accel = 100.0
+damping = 5.0
+mouse_sens = 0.004999999888241291
+scroll_sens = 0.10000000149011612
+
+[window]
+width = 1708
+height = 1180
