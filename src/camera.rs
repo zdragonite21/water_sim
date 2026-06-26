@@ -242,19 +242,22 @@ impl CameraController {
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
-    pub view_proj: [[f32; 4]; 4],
+    pub view: [[f32; 4]; 4],
+    pub proj: [[f32; 4]; 4],
 }
 
 impl CameraUniform {
     pub fn new() -> Self {
         use SquareMatrix;
         Self {
-            view_proj: Matrix4::identity().into(),
+            view: Matrix4::identity().into(),
+            proj: Matrix4::identity().into(),
         }
     }
 
     pub fn update_view_proj(&mut self, camera: &Camera, projection: &Projection) {
-        self.view_proj = (projection.proj_matrix() * camera.view_matrix()).into();
+        self.view = camera.view_matrix().into();
+        self.proj = projection.proj_matrix().into();
     }
 }
 

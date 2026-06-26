@@ -1,5 +1,6 @@
 struct CameraUniform {
-    view_proj: mat4x4<f32>,
+    view: mat4x4<f32>,
+    proj: mat4x4<f32>,
 };
 
 struct InstanceInput {
@@ -30,7 +31,10 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     );
 
     var out: VertexOutput;
-    out.clip_position = camera.view_proj * model_matrix * vec4<f32>(model.position, 1.0);
+    var view_orient: mat4x4<f32> = camera.view;
+    view_orient[3] = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+
+    out.clip_position = camera.proj * camera.view * model_matrix * transpose(view_orient) * vec4<f32>(model.position, 1.0);
     return out;
 }
 
