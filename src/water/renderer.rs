@@ -26,6 +26,13 @@ impl InstanceRaw {
             attributes: &Self::ATTRIBS,
         }
     }
+
+    fn from_particle(p: &Particle) -> Self {
+        Self {
+            pos: p.pos.into(),
+            vel: p.vel.into(),
+        }
+    }
 }
 
 #[repr(C)]
@@ -208,7 +215,7 @@ impl WaterRenderer {
         let instance_data = sim
             .particles()
             .iter()
-            .map(Particle::to_raw)
+            .map(InstanceRaw::from_particle)
             .collect::<Vec<_>>();
         queue.write_buffer(
             &self.instance_buffer,

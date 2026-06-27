@@ -1,17 +1,7 @@
 use cgmath::Vector3;
-use crate::water::renderer::InstanceRaw;
 pub struct Particle {
     pub pos: Vector3<f32>,
     pub vel: Vector3<f32>,
-}
-
-impl Particle {
-    pub fn to_raw(&self) -> InstanceRaw {
-        InstanceRaw {
-            pos: self.pos.into(),
-            vel: self.vel.into(),
-        }
-    }
 }
 
 pub struct WaterSim {
