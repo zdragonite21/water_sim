@@ -1,3 +1,4 @@
 pub mod model;
-// pub mod resource;
+#[cfg(feature = "asset-loading")]
+pub mod resource;
 pub mod texture;

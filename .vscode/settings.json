@@ -6,7 +6,9 @@
         "titleBar.inactiveBackground": "#1E4E8C",
         "titleBar.inactiveForeground": "#FFFFFF"
     },
-    // "rust-analyzer.cargo.target": "wasm32-unknown-unknown",
+    "rust-analyzer.cargo.target": "x86_64-pc-windows-msvc",
+    "rust-analyzer.cargo.allTargets": false,
+    "rust-analyzer.check.allTargets": false,
 
     "editor.inlineSuggest.minShowDelay": 500,
     "editor.inlineSuggest.edits.showCollapsed": true,

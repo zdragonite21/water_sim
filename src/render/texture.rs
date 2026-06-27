@@ -1,4 +1,6 @@
+#[cfg(feature = "asset-loading")]
 use anyhow::*;
+#[cfg(feature = "asset-loading")]
 use image::GenericImageView;
 
 #[allow(unused)]
@@ -12,6 +14,7 @@ pub struct Texture {
 impl Texture {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
+    #[cfg(feature = "asset-loading")]
     pub fn from_bytes(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -22,6 +25,7 @@ impl Texture {
         Self::from_image(device, queue, &img, Some(label))
     }
 
+    #[cfg(feature = "asset-loading")]
     pub fn from_image(
         device: &wgpu::Device,
         queue: &wgpu::Queue,

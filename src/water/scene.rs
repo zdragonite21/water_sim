@@ -1,4 +1,7 @@
-use crate::{config::WaterConfig, water::{renderer::WaterRenderer, sim::WaterSim}};
+use crate::{
+    config::WaterConfig,
+    water::{renderer::WaterRenderer, sim::WaterSim},
+};
 
 pub struct WaterScene {
     sim: WaterSim,
@@ -8,21 +11,26 @@ pub struct WaterScene {
 
 impl WaterScene {
     pub async fn new(
-            device: &wgpu::Device,
-            _queue: &wgpu::Queue,
-            config: &wgpu::SurfaceConfiguration,
-            bind_group_layout: &wgpu::BindGroupLayout,
-            water_config: &WaterConfig,
-        ) -> anyhow::Result<Self> {
-            let sim = WaterSim::new(water_config.num_particles as usize);
-            let renderer = WaterRenderer::new(
-                device,
-                config,
-                bind_group_layout,
-                water_config.num_particles as usize,
-            ).await?;
-            Ok(Self { sim, renderer, water_config: *water_config })
-        }
+        device: &wgpu::Device,
+        _queue: &wgpu::Queue,
+        config: &wgpu::SurfaceConfiguration,
+        bind_group_layout: &wgpu::BindGroupLayout,
+        water_config: &WaterConfig,
+    ) -> anyhow::Result<Self> {
+        let sim = WaterSim::new(water_config.num_particles as usize);
+        let renderer = WaterRenderer::new(
+            device,
+            config,
+            bind_group_layout,
+            water_config.num_particles as usize,
+        )
+        .await?;
+        Ok(Self {
+            sim,
+            renderer,
+            water_config: *water_config,
+        })
+    }
 
     pub fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
         self.renderer.resize(device, config);

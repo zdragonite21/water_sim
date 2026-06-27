@@ -2,7 +2,11 @@ use crate::{
     render::{
         model::{Mesh, SimpleVertex, Vertex},
         texture::Texture,
-    }, water::{particle::{Particle, ParticleRaw}, sim::WaterSim},
+    },
+    water::{
+        particle::{Particle, ParticleRaw},
+        sim::WaterSim,
+    },
 };
 
 pub struct WaterRenderer {
@@ -21,7 +25,7 @@ impl WaterRenderer {
         num_instances: usize,
     ) -> anyhow::Result<Self> {
         let shader = device.create_shader_module(wgpu::include_wgsl!("water_scene.wgsl"));
-        
+
         let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 
         let render_pipeline_layout =
@@ -91,7 +95,7 @@ impl WaterRenderer {
             instance_buffer,
             particle_display,
             depth_texture,
-            num_instances
+            num_instances,
         })
     }
 
