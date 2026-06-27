@@ -1,13 +1,11 @@
 use crate::{
-    render::{
+    config::WaterConfig, render::{
         model::{Mesh, SimpleVertex, Vertex},
         texture::Texture,
-    },
-    water::{
-        sim::WaterSim,
-        sim::Particle,
-    },
+    }, water::sim::{Particle, WaterSim},
 };
+
+use wgpu::util::DeviceExt;
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -30,12 +28,36 @@ impl InstanceRaw {
     }
 }
 
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct WaterUniform {
+    particle_size: f32,
+    _pad: [u32; 3],
+}
+
+impl WaterUniform {
+    pub fn new() -> Self {
+        Self {
+            particle_size: 1.0,
+            _pad: [0; 3],
+        }
+    }
+    
+    pub fn update(&mut self, config: &WaterConfig) {
+        self.particle_size = config.particle_size;
+    }
+}
+
 pub struct WaterRenderer {
     render_pipeline: wgpu::RenderPipeline,
     instance_buffer: wgpu::Buffer,
     particle_display: Mesh,
     depth_texture: Texture,
     num_instances: usize,
+
+    water_uniform: WaterUniform,
+    water_uniform_buffer: wgpu::Buffer,
+    water_bind_group: wgpu::BindGroup,
 }
 
 impl WaterRenderer {
@@ -44,15 +66,52 @@ impl WaterRenderer {
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
         num_instances: usize,
+        water_config: &WaterConfig,
     ) -> anyhow::Result<Self> {
         let shader = device.create_shader_module(wgpu::include_wgsl!("water_scene.wgsl"));
 
         let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 
+        let mut water_uniform = WaterUniform::new();
+        water_uniform.update(water_config);
+
+        let water_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Water Uniform Buffer"),
+            contents: bytemuck::bytes_of(&water_uniform),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let water_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("water_bind_group_layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
+        let water_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("water_bind_group"),
+            layout: &water_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: water_uniform_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[Some(camera_layout)],
+                bind_group_layouts: &[Some(camera_layout), Some(&water_bind_group_layout)],
                 immediate_size: 0,
             });
 
@@ -117,12 +176,20 @@ impl WaterRenderer {
             particle_display,
             depth_texture,
             num_instances,
+            water_uniform,
+            water_uniform_buffer,
+            water_bind_group,
         })
     }
 
     pub fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
         self.depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
         log::debug!("depth texture rebuilt {}x{}", config.width, config.height);
+    }
+
+    pub fn update_uniforms(&mut self, queue: &wgpu::Queue, config: &WaterConfig) {
+        self.water_uniform.update(config);
+        queue.write_buffer(&self.water_uniform_buffer, 0, bytemuck::bytes_of(&self.water_uniform));
     }
 
     pub fn upload(&mut self, queue: &wgpu::Queue, sim: &WaterSim) {
@@ -176,6 +243,7 @@ impl WaterRenderer {
         render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, camera_bind_group, &[]);
+        render_pass.set_bind_group(1, &self.water_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.particle_display.vertex_buffer.slice(..));
         render_pass.set_index_buffer(
             self.particle_display.index_buffer.slice(..),

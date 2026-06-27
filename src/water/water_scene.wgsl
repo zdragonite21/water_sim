@@ -3,6 +3,10 @@ struct CameraUniform {
     proj: mat4x4<f32>,
 };
 
+struct WaterUniform {
+    particle_size: f32,
+}
+
 struct InstanceInput {
     @location(5) position: vec3<f32>,
     @location(6) velocity: vec3<f32>,
@@ -10,6 +14,9 @@ struct InstanceInput {
 
 @group(0) @binding(0)
 var<uniform> camera: CameraUniform;
+
+@group(1) @binding(0)
+var<uniform> water_config: WaterUniform;
 
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -27,10 +34,10 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     var view_orient: mat4x4<f32> = camera.view;
     view_orient[3] = vec4<f32>(0.0, 0.0, 0.0, 1.0);
 
-    var rotated = transpose(view_orient) * vec4<f32>(model.position, 1.0);
-    var translated = rotated + vec4<f32>(instance.position, 1.0);
+    var pos: vec4<f32> = transpose(view_orient) * vec4<f32>(model.position * water_config.particle_size, 1.0);
+    pos += vec4<f32>(instance.position, 1.0);
 
-    out.clip_position = camera.proj * camera.view * translated;
+    out.clip_position = camera.proj * camera.view * pos;
     out.uv = model.uv;
     return out;
 }
@@ -46,7 +53,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var z: f32 = sqrt(1.0 - sq_dist);
     var view_orient: mat4x4<f32> = camera.view;
     view_orient[3] = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-    var nor: vec3<f32> = normalize(transpose(view_orient) * vec4(center_offset.x, center_offset.y, z, 1.0)).xyz;
+    var nor: vec3<f32> = normalize(transpose(view_orient) * vec4(center_offset.x, center_offset.y, z, 1.0) * water_config.particle_size).xyz;
 
     var light_dir = normalize(vec3<f32>(0.0, 1.0, 1.0));
     var light_intensity: f32 = max(dot(nor, light_dir), 0.1);

@@ -23,6 +23,7 @@ impl WaterScene {
             config,
             bind_group_layout,
             water_config.num_particles as usize,
+            water_config,
         )
         .await?;
         Ok(Self {
@@ -39,6 +40,7 @@ impl WaterScene {
     pub fn update(&mut self, queue: &wgpu::Queue, dt: instant::Duration) {
         self.sim.update(dt);
         self.renderer.upload(queue, &self.sim);
+        self.renderer.update_uniforms(queue, &self.water_config);
     }
 
     pub fn config_mut(&mut self) -> &mut WaterConfig {
