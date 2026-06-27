@@ -78,7 +78,6 @@ inspect_config! {
     pub struct WaterConfig {
         gravity: f32 = 9.81;
         particle_size: f32 = 1.0, 0.05, 5.0;
-        show_particles: bool = true;
         num_particles: u32 = 10000, 1000, 100000;
     }
 }

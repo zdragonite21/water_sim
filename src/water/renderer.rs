@@ -4,10 +4,31 @@ use crate::{
         texture::Texture,
     },
     water::{
-        particle::{Particle, ParticleRaw},
         sim::WaterSim,
+        sim::Particle,
     },
 };
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct InstanceRaw {
+    pub pos: [f32; 3],
+    pub vel: [f32; 3],
+}
+
+impl InstanceRaw {
+    const ATTRIBS: [wgpu::VertexAttribute; 2] =
+        wgpu::vertex_attr_array![5 => Float32x3, 6 => Float32x3];
+
+    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+        use std::mem;
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &Self::ATTRIBS,
+        }
+    }
+}
 
 pub struct WaterRenderer {
     render_pipeline: wgpu::RenderPipeline,
@@ -41,7 +62,7 @@ impl WaterRenderer {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[SimpleVertex::desc(), ParticleRaw::desc()],
+                buffers: &[SimpleVertex::desc(), InstanceRaw::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -85,7 +106,7 @@ impl WaterRenderer {
 
         let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Instance Buffer"),
-            size: (std::mem::size_of::<ParticleRaw>() * num_instances) as u64,
+            size: (std::mem::size_of::<InstanceRaw>() * num_instances) as u64,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
