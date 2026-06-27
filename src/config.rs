@@ -62,7 +62,7 @@ impl AppConfig {
 }
 
 inspect_config! {
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
     #[serde(default)]
     pub struct CameraConfig {
         accel: f32 = 100.0, 0.0, 300.0;
@@ -73,11 +73,12 @@ inspect_config! {
 }
 
 inspect_config! {
-    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
     #[serde(default)]
     pub struct WaterConfig {
         gravity: f32 = 9.81;
         particle_size: f32 = 1.0, 0.05, 5.0;
         show_particles: bool = true;
+        num_particles: u32 = 10000, 1000, 100000;
     }
 }

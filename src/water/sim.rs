@@ -1,0 +1,30 @@
+use cgmath::Vector3;
+
+use crate::water::particle::Particle;
+
+pub struct WaterSim {
+    pub particles: Vec<Particle>,
+}
+
+impl WaterSim {
+    pub fn new(num_particles: usize) -> Self {
+        let mut particles = Vec::with_capacity(num_particles);
+        let width = 20;
+        for i in 0..num_particles {
+            let pos = Vector3::new(
+                i as f32 % width as f32,
+                i as f32 / (width * width) as f32,
+                (i as f32 / width as f32) % width as f32,
+            );
+            particles.push(Particle {
+                pos,
+                vel: Vector3::new(0.0, 0.0, 0.0),
+            });
+        }
+        Self { particles }
+    }
+
+    pub fn update(&mut self, _dt: instant::Duration) {
+        // physics rules live here
+    }
+}

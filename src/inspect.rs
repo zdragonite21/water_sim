@@ -57,6 +57,18 @@ macro_rules! inspect_config_draw_field {
             &mut $self.$field,
         );
     };
+    ($ui:ident, $self:ident, u32, $field:ident, $default:expr, $min:expr, $max:expr) => {
+        $ui.slider(stringify!($field), $min, $max, &mut $self.$field);
+    };
+    ($ui:ident, $self:ident, u32, $field:ident, $default:expr) => {
+        let slider_range = (2.0 * ($default as u32).abs()).max(1.0);
+        $ui.slider_int(
+            stringify!($field),
+            -slider_range,
+            slider_range,
+            &mut $self.$field,
+        );
+    };
     ($ui:ident, $self:ident, bool, $field:ident, $default:expr) => {
         $ui.checkbox(stringify!($field), &mut $self.$field);
     };

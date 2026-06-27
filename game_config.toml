@@ -12,3 +12,4 @@ height = 1180
 gravity = 9.8100004196167
 particle_size = 1.6269999742507935
 show_particles = true
+num_particles = 10000

@@ -71,7 +71,7 @@ impl Camera {
 
     pub fn reset_view(&mut self) {
         *self = Self {
-            settings: self.settings.clone(),
+            settings: self.settings,
             ..Self::default()
         }
     }
@@ -263,7 +263,7 @@ pub struct CameraRig {
 
 impl CameraRig {
     pub fn new(device: &wgpu::Device, width: u32, height: u32, config: &CameraConfig) -> Self {
-        let camera = Camera::new(config.clone());
+        let camera = Camera::new(*config);
         let projection = Projection::new(width, height, cgmath::Deg(45.0), 0.1, 100.0);
         let controller = CameraController::new();
 
@@ -323,6 +323,6 @@ impl CameraRig {
     }
 
     pub fn current_config(&self) -> CameraConfig {
-        self.camera.settings.clone()
+        self.camera.settings
     }
 }

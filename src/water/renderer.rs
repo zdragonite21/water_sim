@@ -1,33 +1,28 @@
 use crate::{
-    config::WaterConfig,
     render::{
         model::{Mesh, SimpleVertex, Vertex},
         texture::Texture,
-    },
+    }, water::{particle::{Particle, ParticleRaw}, sim::WaterSim},
 };
-use cgmath::prelude::*;
-use wgpu::util::DeviceExt;
 
-pub struct WaterScene {
+pub struct WaterRenderer {
     render_pipeline: wgpu::RenderPipeline,
-    particle_display: Mesh,
-    instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
+    particle_display: Mesh,
     depth_texture: Texture,
-    config: WaterConfig,
+    num_instances: usize,
 }
 
-impl WaterScene {
+impl WaterRenderer {
     pub async fn new(
         device: &wgpu::Device,
-        _queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
-        water_config: &WaterConfig,
+        num_instances: usize,
     ) -> anyhow::Result<Self> {
-        let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
-
         let shader = device.create_shader_module(wgpu::include_wgsl!("water_scene.wgsl"));
+        
+        let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -42,7 +37,7 @@ impl WaterScene {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[SimpleVertex::desc(), InstanceRaw::desc()],
+                buffers: &[SimpleVertex::desc(), ParticleRaw::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -84,23 +79,19 @@ impl WaterScene {
 
         let particle_display = Mesh::square(device);
 
-        let instances = create_instances();
-
-        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        let instance_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Instance Buffer"),
-            contents: bytemuck::cast_slice(&instance_data),
-            usage: wgpu::BufferUsages::VERTEX,
+            size: (std::mem::size_of::<ParticleRaw>() * num_instances) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         });
-        log::debug!("demo scene instances created: {}", instances.len());
 
         Ok(Self {
             render_pipeline,
-            particle_display,
-            instances,
             instance_buffer,
+            particle_display,
             depth_texture,
-            config: water_config.clone(),
+            num_instances
         })
     }
 
@@ -109,16 +100,18 @@ impl WaterScene {
         log::debug!("depth texture rebuilt {}x{}", config.width, config.height);
     }
 
-    pub fn update(&mut self, _dt: instant::Duration) {
-        ()
-    }
-
-    pub fn config_mut(&mut self) -> &mut WaterConfig {
-        &mut self.config
-    }
-
-    pub fn current_config(&self) -> WaterConfig {
-        self.config.clone()
+    pub fn upload(&mut self, queue: &wgpu::Queue, sim: &WaterSim) {
+        // convert sim particles/cells into GPU instance data
+        let instance_data = sim
+            .particles
+            .iter()
+            .map(Particle::to_raw)
+            .collect::<Vec<_>>();
+        queue.write_buffer(
+            &self.instance_buffer,
+            0,
+            bytemuck::cast_slice(&instance_data),
+        );
     }
 
     pub fn render(
@@ -127,6 +120,7 @@ impl WaterScene {
         target_view: &wgpu::TextureView,
         camera_bind_group: &wgpu::BindGroup,
     ) -> anyhow::Result<()> {
+        // draw only; no physics decisions
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -165,66 +159,11 @@ impl WaterScene {
         render_pass.draw_indexed(
             0..self.particle_display.num_elements,
             0,
-            0..self.instances.len() as u32,
+            0..self.num_instances as u32,
         );
 
         drop(render_pass);
 
         Ok(())
     }
-}
-
-struct Instance {
-    position: cgmath::Vector3<f32>,
-    rotation: cgmath::Quaternion<f32>,
-}
-
-impl Instance {
-    fn to_raw(&self) -> InstanceRaw {
-        InstanceRaw {
-            model: (cgmath::Matrix4::from_translation(self.position)
-                * cgmath::Matrix4::from(self.rotation))
-            .into(),
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct InstanceRaw {
-    model: [[f32; 4]; 4],
-}
-
-impl InstanceRaw {
-    const ATTRIBS: [wgpu::VertexAttribute; 4] =
-        wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4];
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        use std::mem;
-        wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &Self::ATTRIBS,
-        }
-    }
-}
-
-fn create_instances() -> Vec<Instance> {
-    const NUM_INSTANCES_PER_ROW: u32 = 10;
-    const SPACE_BETWEEN: f32 = 3.0;
-    let instances = (0..NUM_INSTANCES_PER_ROW)
-        .flat_map(|z| {
-            (0..NUM_INSTANCES_PER_ROW).map(move |x| {
-                let x = SPACE_BETWEEN * (x as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                let z = SPACE_BETWEEN * (z as f32 - NUM_INSTANCES_PER_ROW as f32 / 2.0);
-                let position = cgmath::Vector3 { x, y: 0.0, z };
-                let rotation = cgmath::Quaternion::from_axis_angle(
-                    cgmath::Vector3::unit_z(),
-                    cgmath::Deg(0.0),
-                );
-
-                Instance { position, rotation }
-            })
-        })
-        .collect::<Vec<_>>();
-    instances
 }

@@ -4,10 +4,8 @@ struct CameraUniform {
 };
 
 struct InstanceInput {
-    @location(5) model_matrix_0: vec4<f32>,
-    @location(6) model_matrix_1: vec4<f32>,
-    @location(7) model_matrix_2: vec4<f32>,
-    @location(8) model_matrix_3: vec4<f32>,
+    @location(5) position: vec3<f32>,
+    @location(6) velocity: vec3<f32>,
 };
 
 @group(0) @binding(0)
@@ -25,18 +23,14 @@ struct VertexOutput {
 
 @vertex
 fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
-    let model_matrix = mat4x4<f32>(
-        instance.model_matrix_0,
-        instance.model_matrix_1,
-        instance.model_matrix_2,
-        instance.model_matrix_3,
-    );
-
     var out: VertexOutput;
     var view_orient: mat4x4<f32> = camera.view;
     view_orient[3] = vec4<f32>(0.0, 0.0, 0.0, 1.0);
 
-    out.clip_position = camera.proj * camera.view * model_matrix * transpose(view_orient) * vec4<f32>(model.position, 1.0);
+    var rotated = transpose(view_orient) * vec4<f32>(model.position, 1.0);
+    var translated = rotated + vec4<f32>(instance.position, 1.0);
+
+    out.clip_position = camera.proj * camera.view * translated;
     out.uv = model.uv;
     return out;
 }

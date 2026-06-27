@@ -10,7 +10,7 @@ use winit::{
 use crate::{
     camera::CameraRig,
     config::{AppConfig, WindowConfig},
-    scene::water_scene::WaterScene,
+    water::scene::WaterScene,
 };
 use crate::{frame_clock::FrameClock, gui::Gui};
 
@@ -250,7 +250,7 @@ impl State {
 
     pub fn update(&mut self, dt: instant::Duration) {
         self.camera.update(&self.queue, dt);
-        self.scene.update(dt);
+        self.scene.update(&self.queue, dt);
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {
