@@ -10,5 +10,5 @@ height = 1180
 
 [water]
 gravity = 9.8100004196167
-particle_size = 0.6570000052452087
-num_particles = 10000
+particle_size = 0.7210000157356262
+num_particles = 10581

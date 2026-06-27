@@ -163,12 +163,7 @@ impl WaterRenderer {
 
         let particle_display = Mesh::square(device);
 
-        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Instance Buffer"),
-            size: (std::mem::size_of::<InstanceRaw>() * num_instances) as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let instance_buffer = Self::new_instance_buffer(device, num_instances);
 
         Ok(Self {
             render_pipeline,
@@ -185,6 +180,22 @@ impl WaterRenderer {
     pub fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
         self.depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
         log::debug!("depth texture rebuilt {}x{}", config.width, config.height);
+    }
+
+    pub fn new_instance_buffer(device: &wgpu::Device, num_instances: usize) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Instance Buffer"),
+            size: (std::mem::size_of::<InstanceRaw>() * num_instances) as u64,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
+    }
+
+    pub fn resize_instance_buffer(&mut self, device: &wgpu::Device, num_instances: usize) {
+        if num_instances != self.num_instances {
+            self.instance_buffer = Self::new_instance_buffer(device, num_instances);
+            self.num_instances = num_instances;
+        }
     }
 
     pub fn update_uniforms(&mut self, queue: &wgpu::Queue, config: &WaterConfig) {

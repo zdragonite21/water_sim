@@ -244,6 +244,10 @@ impl State {
                 self.camera.camera.reset_view();
                 true
             }
+            KeyCode::KeyR => {
+                self.scene.reset(&self.device);
+                true
+            }
             _ => false,
         }
     }

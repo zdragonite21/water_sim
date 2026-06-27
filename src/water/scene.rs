@@ -43,6 +43,11 @@ impl WaterScene {
         self.renderer.update_uniforms(queue, &self.water_config);
     }
 
+    pub fn reset(&mut self, device: &wgpu::Device) {
+        self.sim = WaterSim::new(self.water_config.num_particles as usize);
+        self.renderer.resize_instance_buffer(device, self.water_config.num_particles as usize);
+    }
+
     pub fn config_mut(&mut self) -> &mut WaterConfig {
         &mut self.water_config
     }
