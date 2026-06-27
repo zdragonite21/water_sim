@@ -128,7 +128,7 @@ impl WaterRenderer {
     pub fn upload(&mut self, queue: &wgpu::Queue, sim: &WaterSim) {
         // convert sim particles/cells into GPU instance data
         let instance_data = sim
-            .particles
+            .particles()
             .iter()
             .map(Particle::to_raw)
             .collect::<Vec<_>>();

@@ -15,7 +15,7 @@ impl Particle {
 }
 
 pub struct WaterSim {
-    pub particles: Vec<Particle>,
+    particles: Vec<Particle>,
 }
 
 impl WaterSim {
@@ -34,6 +34,10 @@ impl WaterSim {
             });
         }
         Self { particles }
+    }
+
+    pub fn particles(&self) -> &[Particle] {
+        &self.particles
     }
 
     pub fn update(&mut self, _dt: instant::Duration) {
