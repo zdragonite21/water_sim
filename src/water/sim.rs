@@ -1,4 +1,6 @@
 use cgmath::Vector3;
+use rand::RngExt;
+use rand::rngs::ThreadRng;
 
 use crate::config::WaterSimConfig;
 pub struct Particle {
@@ -9,31 +11,33 @@ pub struct Particle {
 pub struct WaterSim {
     particles: Vec<Particle>,
     config: WaterSimConfig,
+    rng: ThreadRng,
 }
 
 impl WaterSim {
     pub fn new(config: &WaterSimConfig) -> Self {
         Self {
-            particles: Self::create_particles(config.num_particles),
             config: config.clone(),
+            particles: Vec::new(),
+            rng: rand::rng(),
         }
     }
 
-    fn create_particles(num_particles: u32) -> Vec<Particle> {
-        let mut particles = Vec::with_capacity(num_particles as usize);
-        let width = 20;
-        for i in 0..num_particles {
-            let pos = Vector3::new(
-                i as f32 % width as f32,
-                i as f32 / (width * width) as f32,
-                (i as f32 / width as f32) % width as f32,
-            );
+    fn create_particles(&mut self) {
+        let n = self.config.num_particles as usize;
+        let mut particles = Vec::with_capacity(n);
+
+        for _ in 0..n {
+            let xi_1 = self.rng.random_range(-1.0..=1.0);
+            let xi_2 = self.rng.random_range(-1.0..=1.0);
+
+            let pos = Vector3::new(xi_1 * self.config.size_x, xi_2 * self.config.size_y, 0.0) / 2.0;
             particles.push(Particle {
                 pos,
                 vel: Vector3::new(0.0, 0.0, 0.0),
             });
         }
-        particles
+        self.particles = particles;
     }
 
     pub fn particles(&self) -> &[Particle] {
@@ -49,7 +53,7 @@ impl WaterSim {
     }
 
     pub fn reset(&mut self) {
-        self.particles = Self::create_particles(self.config.num_particles);
+        self.create_particles();
     }
 
     pub fn current_config(&self) -> WaterSimConfig {
@@ -66,7 +70,7 @@ impl WaterSim {
     }
 
     fn resolve_collisions(&mut self, i: usize) {
-        let half_bound_size = Vector3::new(10.0, 10.0, 10.0) * 2.0;
+        let half_bound_size = Vector3::new(self.config.size_x, self.config.size_y, 10.0) / 2.0;
         let damping = 0.5;
 
         if self.particles[i].pos.x.abs() > half_bound_size.x {

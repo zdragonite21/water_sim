@@ -78,6 +78,8 @@ inspect_config! {
     pub struct WaterSimConfig {
         gravity: f32 = 9.81;
         num_particles: u32 = 10000, 1000, 100000;
+        size_x: f32 = 20.0, 1.0, 100.0;
+        size_y: f32 = 20.0, 1.0, 100.0;
     }
 }
 

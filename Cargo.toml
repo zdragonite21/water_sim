@@ -26,6 +26,7 @@ bytemuck = { version = "1.2", features = [ "derive" ] }
 cgmath = "0.18"
 tobj = { version = "3.2", default-features = false, features = ["async"], optional = true }
 instant = "0.1"
+rand = "0.10"
 
 imgui = "0.12"
 imgui-winit-support = "0.13"
