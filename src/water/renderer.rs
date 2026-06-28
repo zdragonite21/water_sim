@@ -1,5 +1,5 @@
 use crate::{
-    config::WaterConfig,
+    config::WaterRenderConfig,
     render::{
         model::{Mesh, SimpleVertex, Vertex},
         texture::Texture,
@@ -52,7 +52,7 @@ impl WaterUniform {
         }
     }
 
-    pub fn update(&mut self, config: &WaterConfig) {
+    pub fn update(&mut self, config: &WaterRenderConfig) {
         self.particle_size = config.particle_size;
     }
 }
@@ -67,6 +67,7 @@ pub struct WaterRenderer {
     water_uniform: WaterUniform,
     water_uniform_buffer: wgpu::Buffer,
     water_bind_group: wgpu::BindGroup,
+    config: WaterRenderConfig,
 }
 
 impl WaterRenderer {
@@ -75,14 +76,14 @@ impl WaterRenderer {
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
         num_instances: usize,
-        water_config: &WaterConfig,
+        render_config: &WaterRenderConfig,
     ) -> anyhow::Result<Self> {
         let shader = device.create_shader_module(wgpu::include_wgsl!("water_scene.wgsl"));
 
         let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 
         let mut water_uniform = WaterUniform::new();
-        water_uniform.update(water_config);
+        water_uniform.update(render_config);
 
         let water_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Water Uniform Buffer"),
@@ -180,6 +181,7 @@ impl WaterRenderer {
             water_uniform,
             water_uniform_buffer,
             water_bind_group,
+            config: render_config.clone(),
         })
     }
 
@@ -204,13 +206,25 @@ impl WaterRenderer {
         }
     }
 
-    pub fn update_uniforms(&mut self, queue: &wgpu::Queue, config: &WaterConfig) {
-        self.water_uniform.update(config);
+    pub fn update_config(&mut self, config: &WaterRenderConfig) {
+        if config == &self.config {
+            return;
+        }
+
+        self.config = config.clone();
+    }
+
+    pub fn update_uniforms(&mut self, queue: &wgpu::Queue) {
+        self.water_uniform.update(&self.config);
         queue.write_buffer(
             &self.water_uniform_buffer,
             0,
             bytemuck::bytes_of(&self.water_uniform),
         );
+    }
+
+    pub fn current_config(&self) -> WaterRenderConfig {
+        self.config.clone()
     }
 
     pub fn upload(&mut self, queue: &wgpu::Queue, sim: &WaterSim) {

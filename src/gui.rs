@@ -76,7 +76,7 @@ impl Gui {
         target_view: &wgpu::TextureView,
         window: &Window,
         camera: &mut Camera,
-        water: &mut WaterConfig,
+        water_config: &mut WaterConfig,
     ) -> anyhow::Result<()> {
         self.context.io_mut().update_delta_time(dt);
         self.platform.prepare_frame(self.context.io_mut(), window)?;
@@ -85,7 +85,7 @@ impl Gui {
 
         self.debug_text.draw(ui);
         self.camera.draw(ui, camera);
-        self.water.draw(ui, water);
+        self.water.draw(ui, water_config);
 
         self.platform.prepare_render(ui, window);
         let draw_data = self.context.render();
@@ -201,16 +201,20 @@ impl WaterPanel {
         Self { open: true }
     }
 
-    pub fn draw(&mut self, ui: &imgui::Ui, water: &mut WaterConfig) {
+    pub fn draw(&mut self, ui: &imgui::Ui, water_config: &mut WaterConfig) {
         if !self.open {
             return;
         }
 
         ui.window("Water")
             .opened(&mut self.open)
-            .size([280.0, 95.0], imgui::Condition::FirstUseEver)
+            .size([280.0, 125.0], imgui::Condition::FirstUseEver)
             .build(|| {
-                water.inspect(ui);
+                ui.text("Simulation");
+                water_config.sim.inspect(ui);
+                ui.separator();
+                ui.text("Rendering");
+                water_config.render.inspect(ui);
             });
     }
 }

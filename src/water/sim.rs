@@ -1,6 +1,6 @@
 use cgmath::Vector3;
 
-use crate::config::WaterConfig;
+use crate::config::WaterSimConfig;
 pub struct Particle {
     pub pos: Vector3<f32>,
     pub vel: Vector3<f32>,
@@ -8,14 +8,21 @@ pub struct Particle {
 
 pub struct WaterSim {
     particles: Vec<Particle>,
-    gravity: f32,
+    config: WaterSimConfig,
 }
 
 impl WaterSim {
-    pub fn new(config: &WaterConfig) -> Self {
-        let mut particles = Vec::with_capacity(config.num_particles as usize);
+    pub fn new(config: &WaterSimConfig) -> Self {
+        Self {
+            particles: Self::create_particles(config.num_particles),
+            config: config.clone(),
+        }
+    }
+
+    fn create_particles(num_particles: u32) -> Vec<Particle> {
+        let mut particles = Vec::with_capacity(num_particles as usize);
         let width = 20;
-        for i in 0..config.num_particles {
+        for i in 0..num_particles {
             let pos = Vector3::new(
                 i as f32 % width as f32,
                 i as f32 / (width * width) as f32,
@@ -26,20 +33,37 @@ impl WaterSim {
                 vel: Vector3::new(0.0, 0.0, 0.0),
             });
         }
-        Self {
-            particles,
-            gravity: config.gravity,
-        }
+        particles
     }
 
     pub fn particles(&self) -> &[Particle] {
         &self.particles
     }
 
+    pub fn update_config(&mut self, config: &WaterSimConfig) {
+        if config == &self.config {
+            return;
+        }
+
+        if config.num_particles != self.config.num_particles {
+            self.particles = Self::create_particles(config.num_particles);
+        }
+
+        self.config = config.clone();
+    }
+
+    pub fn reset(&mut self) {
+        self.particles = Self::create_particles(self.config.num_particles);
+    }
+
+    pub fn current_config(&self) -> WaterSimConfig {
+        self.config.clone()
+    }
+
     pub fn update(&mut self, dt: instant::Duration) {
         for i in 0..self.particles.len() {
             let p = &mut self.particles[i];
-            p.vel.y -= self.gravity * dt.as_secs_f32();
+            p.vel.y -= self.config.gravity * dt.as_secs_f32();
             p.pos += p.vel * dt.as_secs_f32();
             self.resolve_collisions(i);
         }

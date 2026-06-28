@@ -8,7 +8,9 @@ scroll_sens = 0.10000000149011612
 width = 1708
 height = 1180
 
-[water]
-gravity = 11.265999794006348
-particle_size = 0.6570000052452087
-num_particles = 8026
+[water.sim]
+gravity = 10.164999961853027
+num_particles = 17699
+
+[water.render]
+particle_size = 0.8960000276565552

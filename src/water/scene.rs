@@ -6,7 +6,6 @@ use crate::{
 pub struct WaterScene {
     sim: WaterSim,
     renderer: WaterRenderer,
-    water_config: WaterConfig,
 }
 
 impl WaterScene {
@@ -17,20 +16,16 @@ impl WaterScene {
         bind_group_layout: &wgpu::BindGroupLayout,
         water_config: &WaterConfig,
     ) -> anyhow::Result<Self> {
-        let sim = WaterSim::new(water_config);
+        let sim = WaterSim::new(&water_config.sim);
         let renderer = WaterRenderer::new(
             device,
             config,
             bind_group_layout,
-            water_config.num_particles as usize,
-            water_config,
+            water_config.sim.num_particles as usize,
+            &water_config.render,
         )
         .await?;
-        Ok(Self {
-            sim,
-            renderer,
-            water_config: *water_config,
-        })
+        Ok(Self { sim, renderer })
     }
 
     pub fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
@@ -40,21 +35,25 @@ impl WaterScene {
     pub fn update(&mut self, queue: &wgpu::Queue, dt: instant::Duration) {
         self.sim.update(dt);
         self.renderer.upload(queue, &self.sim);
-        self.renderer.update_uniforms(queue, &self.water_config);
     }
 
     pub fn reset(&mut self, device: &wgpu::Device) {
-        self.sim = WaterSim::new(&self.water_config);
+        self.sim.reset();
         self.renderer
-            .resize_instance_buffer(device, self.water_config.num_particles as usize);
+            .resize_instance_buffer(device, self.sim.current_config().num_particles as usize);
     }
 
-    pub fn config_mut(&mut self) -> &mut WaterConfig {
-        &mut self.water_config
+    pub fn update_config(&mut self, queue: &wgpu::Queue, config: &WaterConfig) {
+        self.sim.update_config(&config.sim);
+        self.renderer.update_config(&config.render);
+        self.renderer.update_uniforms(queue);
     }
 
     pub fn current_config(&self) -> WaterConfig {
-        self.water_config
+        WaterConfig {
+            sim: self.sim.current_config(),
+            render: self.renderer.current_config(),
+        }
     }
 
     pub fn render(

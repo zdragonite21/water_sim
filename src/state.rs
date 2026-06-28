@@ -307,6 +307,8 @@ impl State {
         self.scene
             .render(&mut encoder, &view, &self.camera.bind_group)?;
 
+        let mut water_config = self.scene.current_config();
+
         self.gui.render(
             self.frame_clock.dt,
             &self.device,
@@ -315,8 +317,10 @@ impl State {
             &view,
             &self.window,
             &mut self.camera.camera,
-            self.scene.config_mut(),
+            &mut water_config,
         )?;
+
+        self.scene.update_config(&self.queue, &water_config);
 
         self.queue.submit([encoder.finish()]);
         output.present();
