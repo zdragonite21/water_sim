@@ -6,6 +6,7 @@ use crate::{
 pub struct WaterScene {
     sim: WaterSim,
     renderer: WaterRenderer,
+    paused: bool,
 }
 
 impl WaterScene {
@@ -16,7 +17,8 @@ impl WaterScene {
         bind_group_layout: &wgpu::BindGroupLayout,
         water_config: &WaterConfig,
     ) -> anyhow::Result<Self> {
-        let sim = WaterSim::new(&water_config.sim);
+        let mut sim = WaterSim::new(&water_config.sim);
+        sim.reset();
         let renderer = WaterRenderer::new(
             device,
             config,
@@ -25,15 +27,21 @@ impl WaterScene {
             &water_config.render,
         )
         .await?;
-        Ok(Self { sim, renderer })
+        Ok(Self { sim, renderer, paused: true })
     }
 
     pub fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
         self.renderer.resize(device, config);
     }
 
+    pub fn toggle_pause(&mut self) {
+        self.paused = !self.paused;
+    }
+
     pub fn update(&mut self, queue: &wgpu::Queue, dt: instant::Duration) {
-        self.sim.update(dt);
+        if !self.paused {
+            self.sim.update(dt);
+        }
         self.renderer.upload(queue, &self.sim);
     }
 

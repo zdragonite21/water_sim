@@ -248,6 +248,10 @@ impl State {
                 self.scene.reset(&self.device);
                 true
             }
+            KeyCode::Enter => {
+                self.scene.toggle_pause();
+                true
+            }
             _ => false,
         }
     }
