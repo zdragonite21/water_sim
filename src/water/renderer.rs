@@ -1,8 +1,10 @@
 use crate::{
-    config::WaterConfig, render::{
+    config::WaterConfig,
+    render::{
         model::{Mesh, SimpleVertex, Vertex},
         texture::Texture,
-    }, water::sim::{Particle, WaterSim},
+    },
+    water::sim::{Particle, WaterSim},
 };
 
 use wgpu::util::DeviceExt;
@@ -49,7 +51,7 @@ impl WaterUniform {
             _pad: [0; 3],
         }
     }
-    
+
     pub fn update(&mut self, config: &WaterConfig) {
         self.particle_size = config.particle_size;
     }
@@ -88,10 +90,10 @@ impl WaterRenderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let water_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("water_bind_group_layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
+        let water_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("water_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Buffer {
@@ -100,19 +102,16 @@ impl WaterRenderer {
                         min_binding_size: None,
                     },
                     count: None,
-                },
-            ],
-        });
+                }],
+            });
 
         let water_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("water_bind_group"),
             layout: &water_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: water_uniform_buffer.as_entire_binding(),
-                },
-            ],
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: water_uniform_buffer.as_entire_binding(),
+            }],
         });
 
         let render_pipeline_layout =
@@ -207,7 +206,11 @@ impl WaterRenderer {
 
     pub fn update_uniforms(&mut self, queue: &wgpu::Queue, config: &WaterConfig) {
         self.water_uniform.update(config);
-        queue.write_buffer(&self.water_uniform_buffer, 0, bytemuck::bytes_of(&self.water_uniform));
+        queue.write_buffer(
+            &self.water_uniform_buffer,
+            0,
+            bytemuck::bytes_of(&self.water_uniform),
+        );
     }
 
     pub fn upload(&mut self, queue: &wgpu::Queue, sim: &WaterSim) {

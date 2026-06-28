@@ -17,7 +17,7 @@ impl WaterScene {
         bind_group_layout: &wgpu::BindGroupLayout,
         water_config: &WaterConfig,
     ) -> anyhow::Result<Self> {
-        let sim = WaterSim::new(water_config.num_particles as usize);
+        let sim = WaterSim::new(water_config);
         let renderer = WaterRenderer::new(
             device,
             config,
@@ -44,8 +44,9 @@ impl WaterScene {
     }
 
     pub fn reset(&mut self, device: &wgpu::Device) {
-        self.sim = WaterSim::new(self.water_config.num_particles as usize);
-        self.renderer.resize_instance_buffer(device, self.water_config.num_particles as usize);
+        self.sim = WaterSim::new(&self.water_config);
+        self.renderer
+            .resize_instance_buffer(device, self.water_config.num_particles as usize);
     }
 
     pub fn config_mut(&mut self) -> &mut WaterConfig {

@@ -9,6 +9,6 @@ width = 1708
 height = 1180
 
 [water]
-gravity = 9.8100004196167
-particle_size = 0.7210000157356262
-num_particles = 10581
+gravity = 11.265999794006348
+particle_size = 0.6570000052452087
+num_particles = 8026
