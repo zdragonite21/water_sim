@@ -9,8 +9,8 @@ width = 1708
 height = 1180
 
 [water.sim]
-gravity = 10.164999961853027
-num_particles = 17699
+gravity = 9.218999862670898
+num_particles = 5771
 
 [water.render]
-particle_size = 0.8960000276565552
+particle_size = 0.628000020980835

@@ -45,10 +45,6 @@ impl WaterSim {
             return;
         }
 
-        if config.num_particles != self.config.num_particles {
-            self.particles = Self::create_particles(config.num_particles);
-        }
-
         self.config = config.clone();
     }
 
