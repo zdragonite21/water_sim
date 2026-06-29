@@ -63,7 +63,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var light_intensity: f32 = max(dot(nor, light_dir), 0.1);
 
     var width = 0.1;
-    var error = smoothstep(in.density, water_config.target_density * (1.0 - width), water_config.target_density * (1.0 + width));
+    var error = smoothstep(water_config.target_density * (1.0 - width), water_config.target_density * (1.0 + width), in.density);
     var color = mix(vec4<f32>(0.5, 1.0, 0.0, 1.0), vec4<f32>(0.5, 0.0, 1.0, 1.0), error);
     return light_intensity * color;
 }
