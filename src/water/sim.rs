@@ -13,6 +13,7 @@ pub struct Particle {
 
 pub struct WaterSim {
     particles: Vec<Particle>,
+    spatial_grid: SpatialGrid,
     config: WaterSimConfig,
     rng: ThreadRng,
 }
@@ -20,8 +21,9 @@ pub struct WaterSim {
 impl WaterSim {
     pub fn new(config: &WaterSimConfig) -> Self {
         Self {
-            config: config.clone(),
             particles: Vec::new(),
+            spatial_grid: SpatialGrid::new(),
+            config: config.clone(),
             rng: rand::rng(),
         }
     }
@@ -67,24 +69,47 @@ impl WaterSim {
     pub fn update(&mut self, dt: instant::Duration) {
         let dt = dt.as_secs_f32();
 
-        for i in 0..self.particles.len() {
-            let density = Self::calculate_density(&self.config, &self.particles, i);
+        self.rebuild_spatial_grid();
 
-            let p = &mut self.particles[i];
-            p.vel += -Vector3::unit_y() * self.config.gravity * dt;
-            p.density = density;
+        self.compute_densities();
+
+        self.apply_pressure_forces(dt);
+
+        self.integrate_velocities(dt);
+    }
+
+    fn rebuild_spatial_grid(&mut self) {
+        self.spatial_grid
+            .update_spatial_lookup(&self.particles, self.config.smoothing_radius);
+    }
+
+    fn compute_densities(&mut self) {
+        for i in 0..self.particles.len() {
+            let density =
+                Self::calculate_density(&self.spatial_grid, &self.config, &self.particles, i);
+
+            self.particles[i].density = density;
         }
+    }
 
+    fn apply_pressure_forces(&mut self, dt: f32) {
         for i in 0..self.particles.len() {
-            let pos = self.particles[i].pos;
-            let pressure_force = -Self::calculate_pressure_force(&self.config, &self.particles, pos);
+            let pressure_force = -Self::calculate_pressure_force(
+                &self.spatial_grid,
+                &self.config,
+                &self.particles,
+                i,
+            );
             let density = self.particles[i].density.max(f32::EPSILON);
             let pressure_accel = pressure_force / density;
 
             self.particles[i].vel += pressure_accel * dt;
         }
+    }
 
+    fn integrate_velocities(&mut self, dt: f32) {
         for p in &mut self.particles {
+            p.vel += -Vector3::unit_y() * self.config.gravity * dt;
             p.pos += p.vel * dt;
             Self::resolve_collisions(&self.config, p);
         }
@@ -123,47 +148,57 @@ impl WaterSim {
         scale * dst * f * f
     }
 
-    fn calculate_density(config: &WaterSimConfig, particles: &[Particle], p_idx: usize) -> f32 {
+    fn calculate_density(
+        grid: &SpatialGrid,
+        config: &WaterSimConfig,
+        particles: &[Particle],
+        particle_idx: usize,
+    ) -> f32 {
         let mut density = 0.0;
+        let sample_point = particles[particle_idx].pos;
 
-        for i in 0..particles.len() {
-            if i == p_idx {
-                continue;
-            }
+        grid.for_each_neighbor(
+            particles,
+            config.smoothing_radius,
+            sample_point,
+            |neighbor_idx, _neighbor, _offset, dst| {
+                if neighbor_idx == particle_idx {
+                    return;
+                }
 
-            let offset = particles[i].pos - particles[p_idx].pos;
-            let dst = offset.magnitude();
-            
+                let influence = Self::smoothing_kernel(config.smoothing_radius, dst);
+                density += config.mass * influence;
+            },
+        );
 
-            let influence = Self::smoothing_kernel(config.smoothing_radius, dst);
-            density += config.mass * influence;
-        }
         density
     }
 
     fn calculate_pressure_force(
+        grid: &SpatialGrid,
         config: &WaterSimConfig,
         particles: &[Particle],
-        sample_point: Vector3<f32>,
+        particle_idx: usize,
     ) -> Vector3<f32> {
         let mut density_gradient = Vector3::new(0.0, 0.0, 0.0);
+        let sample_point = particles[particle_idx].pos;
 
-        for particle in particles {
-            let offset = particle.pos - sample_point;
-            let dst = offset.magnitude();
-            if dst == 0.0 {
-                continue;
-            }
+        grid.for_each_neighbor(
+            particles,
+            config.smoothing_radius,
+            sample_point,
+            |neighbor_idx, neighbor, offset, dst| {
+                if particle_idx == neighbor_idx || dst == 0.0 {
+                    return;
+                }
 
-            let dir = offset / dst;
-            let slope = Self::smoothing_kernel_deriv(config.smoothing_radius, dst);
-            let density = particle.density.max(f32::EPSILON);
-            density_gradient += -Self::convert_density_to_pressure(config, particle.density)
-                * dir
-                * slope
-                * config.mass
-                / density;
-        }
+                let dir = offset / dst;
+                let slope = Self::smoothing_kernel_deriv(config.smoothing_radius, dst);
+                let density = neighbor.density.max(f32::EPSILON);
+                let pressure = Self::convert_density_to_pressure(config, neighbor.density);
+                density_gradient += -pressure * dir * slope * config.mass / density;
+            },
+        );
 
         density_gradient
     }
@@ -171,5 +206,131 @@ impl WaterSim {
     fn convert_density_to_pressure(config: &WaterSimConfig, density: f32) -> f32 {
         let density_error = density - config.target_density;
         density_error * config.pressure_multiplier
+    }
+}
+
+#[derive(Clone, PartialEq, PartialOrd, Ord, Eq)]
+struct GridEntry {
+    cell_key: usize,
+    particle_idx: usize,
+}
+struct SpatialGrid {
+    spatial_lookup: Vec<GridEntry>,
+    start_indices: Vec<usize>,
+}
+
+impl SpatialGrid {
+    const CELL_OFFSETS: [(i32, i32); 9] = [
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (0, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
+    ];
+
+    fn new() -> Self {
+        Self {
+            spatial_lookup: Vec::new(),
+            start_indices: Vec::new(),
+        }
+    }
+
+    fn update_spatial_lookup(&mut self, particles: &[Particle], radius: f32) {
+        self.spatial_lookup.resize(
+            particles.len(),
+            GridEntry {
+                cell_key: 0,
+                particle_idx: 0,
+            },
+        );
+        self.start_indices.resize(particles.len(), usize::MAX);
+
+        for i in 0..particles.len() {
+            let (cell_x, cell_y) = Self::position_to_cell(particles[i].pos, radius);
+            let cell_key =
+                Self::get_key_from_hash(Self::hash_cell(cell_x, cell_y), particles.len());
+            self.spatial_lookup[i] = GridEntry {
+                cell_key,
+                particle_idx: i,
+            };
+            self.start_indices[i] = usize::MAX;
+        }
+
+        self.spatial_lookup.sort_by_key(|entry| entry.cell_key);
+
+        // reverse order to get the first index
+        for i in (0..particles.len()).rev() {
+            let cell_key = self.spatial_lookup[i].cell_key;
+            if self.start_indices[cell_key] == usize::MAX {
+                self.start_indices[cell_key] = i;
+            }
+        }
+    }
+
+    fn position_to_cell(pos: Vector3<f32>, radius: f32) -> (i32, i32) {
+        let cell_x = (pos.x / radius).floor() as i32;
+        let cell_y = (pos.y / radius).floor() as i32;
+        (cell_x, cell_y)
+    }
+
+    fn hash_cell(cell_x: i32, cell_y: i32) -> u64 {
+        const PRIME1: u64 = 73_856_093;
+        const PRIME2: u64 = 19_349_663;
+
+        let x = cell_x as u32 as u64;
+        let y = cell_y as u32 as u64;
+
+        x.wrapping_mul(PRIME1) ^ y.wrapping_mul(PRIME2)
+    }
+
+    fn get_key_from_hash(hash: u64, length: usize) -> usize {
+        hash as usize % length
+    }
+
+    fn for_each_neighbor<F>(
+        &self,
+        particles: &[Particle],
+        radius: f32,
+        sample_point: Vector3<f32>,
+        mut f: F,
+    ) where
+        F: FnMut(usize, &Particle, Vector3<f32>, f32),
+    {
+        let (center_x, center_y) = Self::position_to_cell(sample_point, radius);
+        let sq_radius = radius * radius;
+
+        for (off_x, off_y) in Self::CELL_OFFSETS {
+            let key = Self::get_key_from_hash(
+                Self::hash_cell(center_x + off_x, center_y + off_y),
+                particles.len(),
+            );
+
+            let cell_start_idx = self.start_indices[key];
+            if cell_start_idx == usize::MAX {
+                continue;
+            }
+
+            for i in cell_start_idx..self.spatial_lookup.len() {
+                if self.spatial_lookup[i].cell_key != key {
+                    break;
+                }
+
+                let particle_idx = self.spatial_lookup[i].particle_idx;
+                let offset = particles[particle_idx].pos - sample_point;
+                let sq_dist = offset.magnitude2();
+                if sq_dist < sq_radius {
+                    f(
+                        particle_idx,
+                        &particles[particle_idx],
+                        offset,
+                        sq_dist.sqrt(),
+                    );
+                }
+            }
+        }
     }
 }
