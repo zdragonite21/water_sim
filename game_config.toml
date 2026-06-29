@@ -13,11 +13,11 @@ gravity = 0.0
 num_particles = 1000
 size_x = 26.645000457763672
 size_y = 25.964000701904297
-smoothing_radius = 0.13099999725818634
-target_density = 4.440000057220459
-pressure_multiplier = 100.0
+smoothing_radius = 1.5609999895095825
+target_density = 0.10000000149011612
+pressure_multiplier = 34.145999908447266
 mass = 1.0
 
 [water.render]
 particle_size = 0.531000018119812
-target_density = 4.440000057220459
+target_density = 0.10000000149011612

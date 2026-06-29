@@ -94,7 +94,7 @@ impl WaterSim {
 
     fn apply_pressure_forces(&mut self, dt: f32) {
         for i in 0..self.particles.len() {
-            let pressure_force = -Self::calculate_pressure_force(
+            let pressure_force = Self::calculate_pressure_force(
                 &self.spatial_grid,
                 &self.config,
                 &self.particles,
@@ -103,7 +103,7 @@ impl WaterSim {
             let density = self.particles[i].density.max(f32::EPSILON);
             let pressure_accel = pressure_force / density;
 
-            self.particles[i].vel += pressure_accel * dt;
+            self.particles[i].vel = pressure_accel * dt;
         }
     }
 
@@ -144,7 +144,7 @@ impl WaterSim {
             return 0.0;
         }
         let f = radius * radius - dst * dst;
-        let scale = -24.0 * radius - dst * dst;
+        let scale = -24.0 / (PI * radius.powf(8.0));
         scale * dst * f * f
     }
 

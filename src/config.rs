@@ -82,7 +82,7 @@ inspect_config! {
         size_y: f32 = 20.0, 1.0, 100.0;
         smoothing_radius: f32 = 0.5, 0.01, 5.0;
         target_density: f32 = 1.0, 0.1, 10.0;
-        pressure_multiplier: f32 = 0.0, 10.0, 100.0;
+        pressure_multiplier: f32 = 0.0, 10.0, 1000.0;
         mass: f32 = 1.0, 0.1, 10.0;
     }
 }
