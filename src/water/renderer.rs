@@ -14,11 +14,12 @@ use wgpu::util::DeviceExt;
 pub struct InstanceRaw {
     pub pos: [f32; 3],
     pub vel: [f32; 3],
+    pub density: f32,
 }
 
 impl InstanceRaw {
-    const ATTRIBS: [wgpu::VertexAttribute; 2] =
-        wgpu::vertex_attr_array![5 => Float32x3, 6 => Float32x3];
+    const ATTRIBS: [wgpu::VertexAttribute; 3] =
+        wgpu::vertex_attr_array![5 => Float32x3, 6 => Float32x3, 7 => Float32];
 
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         use std::mem;
@@ -33,6 +34,7 @@ impl InstanceRaw {
         Self {
             pos: p.pos.into(),
             vel: p.vel.into(),
+            density: p.density,
         }
     }
 }
@@ -41,19 +43,22 @@ impl InstanceRaw {
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct WaterUniform {
     particle_size: f32,
-    _pad: [u32; 3],
+    target_density: f32,
+    _pad: [u32; 2],
 }
 
 impl WaterUniform {
     pub fn new() -> Self {
         Self {
             particle_size: 1.0,
-            _pad: [0; 3],
+            target_density: 1.0,
+            _pad: [0; 2],
         }
     }
 
     pub fn update(&mut self, config: &WaterRenderConfig) {
         self.particle_size = config.particle_size;
+        self.target_density = config.target_density;
     }
 }
 
@@ -194,7 +199,8 @@ impl WaterRenderer {
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Instance Buffer"),
             size: (std::mem::size_of::<InstanceRaw>() * num_instances) as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::VERTEX
+                | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         })
     }

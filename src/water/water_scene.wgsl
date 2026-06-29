@@ -5,11 +5,13 @@ struct CameraUniform {
 
 struct WaterUniform {
     particle_size: f32,
+    target_density: f32,
 }
 
 struct InstanceInput {
     @location(5) position: vec3<f32>,
     @location(6) velocity: vec3<f32>,
+    @location(7) density: f32,
 };
 
 @group(0) @binding(0)
@@ -26,6 +28,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
+    @location(1) density: f32,
 };
 
 @vertex
@@ -39,6 +42,7 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
 
     out.clip_position = camera.proj * camera.view * pos;
     out.uv = model.uv;
+    out.density = instance.density;
     return out;
 }
 
@@ -57,5 +61,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var light_dir = normalize(vec3<f32>(0.0, 1.0, 1.0));
     var light_intensity: f32 = max(dot(nor, light_dir), 0.1);
-    return light_intensity * vec4<f32>(0.0, 0.5, 1.0, 1.0);
+
+    var width = 0.1;
+    var error = smoothstep(in.density, water_config.target_density * (1.0 - width), water_config.target_density * (1.0 + width));
+    var color = mix(vec4<f32>(0.5, 1.0, 0.0, 1.0), vec4<f32>(0.5, 0.0, 1.0, 1.0), error);
+    return light_intensity * color;
 }
