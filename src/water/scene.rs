@@ -1,11 +1,12 @@
 use crate::{
-    config::WaterConfig,
+    config::{LineRendererConfig, WaterConfig},
     water::{renderer::WaterRenderer, sim::WaterSim},
 };
 
 pub struct WaterScene {
     sim: WaterSim,
     renderer: WaterRenderer,
+    line_renderer_config: LineRendererConfig,
     paused: bool,
     accumulator: instant::Duration,
     fixed_dt: instant::Duration,
@@ -36,6 +37,7 @@ impl WaterScene {
         Ok(Self {
             sim,
             renderer,
+            line_renderer_config: water_config.line_renderer.clone(),
             paused: true,
             accumulator: instant::Duration::ZERO,
             fixed_dt: instant::Duration::from_secs_f32(1.0 / Self::FIXED_FPS as f32),
@@ -57,7 +59,7 @@ impl WaterScene {
     pub fn update(&mut self, queue: &wgpu::Queue, dt: instant::Duration) {
         if !self.paused {
             self.accumulator += dt.min(instant::Duration::from_millis(Self::FIXED_FPS));
-            
+
             let mut steps = 0;
 
             while self.accumulator >= self.fixed_dt && steps < Self::MAX_STEPS {
@@ -87,6 +89,7 @@ impl WaterScene {
     pub fn update_config(&mut self, queue: &wgpu::Queue, config: &WaterConfig) {
         self.sim.update_config(&config.sim);
         self.renderer.update_config(&config.render);
+        self.line_renderer_config = config.line_renderer.clone();
         self.renderer.update_uniforms(queue);
     }
 
@@ -94,6 +97,7 @@ impl WaterScene {
         WaterConfig {
             sim: self.sim.current_config(),
             render: self.renderer.current_config(),
+            line_renderer: self.line_renderer_config.clone(),
         }
     }
 

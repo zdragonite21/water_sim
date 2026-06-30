@@ -215,6 +215,9 @@ impl WaterPanel {
                 ui.separator();
                 ui.text("Rendering");
                 water_config.render.inspect(ui);
+                ui.separator();
+                ui.text("Line Renderer");
+                water_config.line_renderer.inspect(ui);
             });
     }
 }

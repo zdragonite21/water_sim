@@ -7,14 +7,14 @@ macro_rules! inspect_config {
         $(#[$meta:meta])*
         pub struct $name:ident {
             $(
-                $field:ident: $ty:ident = $default:expr $(, $min:expr, $max:expr)?;
+                $field:ident: $tt:tt = $default:expr $(, $min:expr, $max:expr)?;
             )*
         }
     ) => {
         $(#[$meta])*
         pub struct $name {
             $(
-                pub $field: $ty,
+                pub $field: $tt,
             )*
         }
 
@@ -34,7 +34,7 @@ macro_rules! inspect_config {
                     $crate::inspect::inspect_config_draw_field!(
                         ui,
                         self,
-                        $ty,
+                        $tt,
                         $field,
                         $default $(, $min, $max)?
                     );
@@ -68,6 +68,9 @@ macro_rules! inspect_config_draw_field {
             slider_range,
             &mut $self.$field,
         );
+    };
+    ($ui:ident, $self:ident, [f32; 4], $field:ident, $default:expr) => {
+        $ui.color_edit4(stringify!($field), &mut $self.$field);
     };
     ($ui:ident, $self:ident, bool, $field:ident, $default:expr) => {
         $ui.checkbox(stringify!($field), &mut $self.$field);
