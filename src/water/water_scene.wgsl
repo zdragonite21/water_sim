@@ -46,6 +46,12 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     return out;
 }
 
+const RED: vec4<f32> = vec4<f32>(1.0, 0.0, 0.0, 1.0);
+const BLUE: vec4<f32> = vec4<f32>(0.0, 0.0, 1.0, 1.0);
+const GREEN: vec4<f32> = vec4<f32>(0.0, 1.0, 0.0, 1.0);
+const WHITE: vec4<f32> = vec4<f32>(1.0, 1.0, 1.0, 1.0);
+const BLACK: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var center_offset: vec2<f32> = (in.uv - 0.5) * 2.0;
@@ -66,16 +72,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var error = smoothstep(0.0, water_config.target_density, in.density);
     var color = select(
         mix(
-            vec4<f32>(1.0, 1.0, 1.0, 1.0),
-            vec4<f32>(0.0, 0.0, 1.0, 1.0),
+            WHITE,
+            BLUE,
             (error - 0.5) * 2.0
         ),
         mix(
-            vec4<f32>(1.0, 0.0, 0.0, 1.0),
-            vec4<f32>(1.0, 1.0, 1.0, 1.0),
+            RED,
+            WHITE,
             error * 2.0
         ),
         error < 0.5
     );;
-    return light_intensity * vec4(1.0) * color;
+    return light_intensity * color;
 }

@@ -17,13 +17,13 @@ impl WaterScene {
 
     pub async fn new(
         device: &wgpu::Device,
-        _queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
         bind_group_layout: &wgpu::BindGroupLayout,
         water_config: &WaterConfig,
     ) -> anyhow::Result<Self> {
         let mut sim = WaterSim::new(&water_config.sim);
         sim.reset();
+
         let renderer = WaterRenderer::new(
             device,
             config,
@@ -32,6 +32,7 @@ impl WaterScene {
             &water_config.render,
         )
         .await?;
+
         Ok(Self {
             sim,
             renderer,
