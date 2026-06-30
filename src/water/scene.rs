@@ -49,6 +49,10 @@ impl WaterScene {
         self.paused = !self.paused;
     }
 
+    pub fn paused(&self) -> bool {
+        self.paused
+    }
+
     pub fn update(&mut self, queue: &wgpu::Queue, dt: instant::Duration) {
         if !self.paused {
             self.accumulator += dt.min(instant::Duration::from_millis(Self::FIXED_FPS));
@@ -65,6 +69,11 @@ impl WaterScene {
                 self.accumulator = instant::Duration::ZERO;
             }
         }
+        self.renderer.upload(queue, &self.sim);
+    }
+
+    pub fn step(&mut self, queue: &wgpu::Queue) {
+        self.sim.update(self.fixed_dt);
         self.renderer.upload(queue, &self.sim);
     }
 

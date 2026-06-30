@@ -94,7 +94,7 @@ impl WaterSim {
 
     fn apply_pressure_forces(&mut self, dt: f32) {
         for i in 0..self.particles.len() {
-            let pressure_force = Self::calculate_pressure_force(
+            let pressure_force = -Self::calculate_pressure_force(
                 &self.spatial_grid,
                 &self.config,
                 &self.particles,

@@ -252,6 +252,12 @@ impl State {
                 self.scene.toggle_pause();
                 true
             }
+            KeyCode::ArrowRight => {
+                if self.scene.paused() {
+                    self.scene.step(&self.queue);
+                }
+                true
+            }
             _ => false,
         }
     }

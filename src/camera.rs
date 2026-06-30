@@ -117,10 +117,10 @@ impl CameraInput {
     pub fn process_keyboard(&mut self, key: KeyCode, state: ElementState) -> bool {
         let pressed = state == ElementState::Pressed;
         match key {
-            KeyCode::KeyW | KeyCode::ArrowUp => self.forward = pressed,
-            KeyCode::KeyS | KeyCode::ArrowDown => self.backward = pressed,
-            KeyCode::KeyA | KeyCode::ArrowLeft => self.left = pressed,
-            KeyCode::KeyD | KeyCode::ArrowRight => self.right = pressed,
+            KeyCode::KeyW => self.forward = pressed,
+            KeyCode::KeyS => self.backward = pressed,
+            KeyCode::KeyA => self.left = pressed,
+            KeyCode::KeyD => self.right = pressed,
             KeyCode::Space => self.up = pressed,
             KeyCode::ShiftLeft => self.down = pressed,
             _ => return false,
