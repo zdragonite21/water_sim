@@ -100,7 +100,7 @@ impl State {
 
         let camera = CameraRig::new(&device, config.width, config.height, &app_config.camera);
 
-        let mut scene = WaterScene::new(
+        let scene = WaterScene::new(
             &device,
             &config,
             &camera.bind_group_layout,
