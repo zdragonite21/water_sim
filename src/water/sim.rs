@@ -1,12 +1,12 @@
 use std::f32::consts::PI;
 
-use cgmath::{InnerSpace, Vector3};
+use cgmath::{InnerSpace, Point3, Vector3};
 use rand::RngExt;
 use rand::rngs::ThreadRng;
 
 use crate::config::WaterSimConfig;
 pub struct Particle {
-    pub pos: Vector3<f32>,
+    pub pos: Point3<f32>,
     pub vel: Vector3<f32>,
     pub density: f32,
 }
@@ -36,7 +36,11 @@ impl WaterSim {
             let xi_1 = self.rng.random_range(-1.0..=1.0);
             let xi_2 = self.rng.random_range(-1.0..=1.0);
 
-            let pos = Vector3::new(xi_1 * self.config.size_x, xi_2 * self.config.size_y, 0.0) / 2.0;
+            let pos = Point3::new(
+                xi_1 * self.config.size_x * 0.5,
+                xi_2 * self.config.size_y * 0.5,
+                0.0,
+            );
             particles.push(Particle {
                 pos,
                 vel: Vector3::new(0.0, 0.0, 0.0),
@@ -267,7 +271,7 @@ impl SpatialGrid {
         }
     }
 
-    fn position_to_cell(pos: Vector3<f32>, radius: f32) -> (i32, i32) {
+    fn position_to_cell(pos: Point3<f32>, radius: f32) -> (i32, i32) {
         let cell_x = (pos.x / radius).floor() as i32;
         let cell_y = (pos.y / radius).floor() as i32;
         (cell_x, cell_y)
@@ -291,7 +295,7 @@ impl SpatialGrid {
         &self,
         particles: &[Particle],
         radius: f32,
-        sample_point: Vector3<f32>,
+        sample_point: Point3<f32>,
         mut f: F,
     ) where
         F: FnMut(usize, &Particle, Vector3<f32>, f32),

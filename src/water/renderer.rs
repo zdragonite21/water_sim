@@ -22,9 +22,8 @@ impl InstanceRaw {
         wgpu::vertex_attr_array![5 => Float32x3, 6 => Float32x3, 7 => Float32];
 
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
-        use std::mem;
         wgpu::VertexBufferLayout {
-            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &Self::ATTRIBS,
         }
@@ -171,7 +170,7 @@ impl WaterRenderer {
             cache: None,
         });
 
-        log::debug!("demo scene render pipeline created");
+        log::debug!("water scene render pipeline created");
 
         let particle_display = Mesh::square(device);
 
@@ -246,7 +245,7 @@ impl WaterRenderer {
         );
     }
 
-    pub fn render(
+    pub fn draw(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         target_view: &wgpu::TextureView,

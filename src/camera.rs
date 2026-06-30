@@ -325,4 +325,8 @@ impl CameraRig {
     pub fn current_config(&self) -> CameraConfig {
         self.camera.settings.clone()
     }
+
+    pub fn view_proj(&self) -> Matrix4<f32> {
+        self.projection.proj_matrix() * self.camera.view_matrix()
+    }
 }

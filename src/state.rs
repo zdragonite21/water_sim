@@ -134,7 +134,7 @@ impl State {
             self.surface.configure(&self.device, &self.config);
 
             self.camera.resize(width, height);
-            self.scene.resize(&self.device, &self.config);
+            self.scene.resize(&self.device, &self.queue, &self.config);
             log::debug!("surface resized to {}x{}", width, height);
 
             self.is_surface_configured = true;
@@ -253,7 +253,7 @@ impl State {
             }
             KeyCode::ArrowRight => {
                 if self.scene.paused() {
-                    self.scene.step(&self.queue);
+                    self.scene.step(&self.queue, &self.camera.view_proj());
                 }
                 true
             }
@@ -263,7 +263,7 @@ impl State {
 
     pub fn update(&mut self, dt: instant::Duration) {
         self.camera.update(&self.queue, dt);
-        self.scene.update(&self.queue, dt);
+        self.scene.update(&self.queue, dt, &self.camera.view_proj());
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {

@@ -100,12 +100,14 @@ inspect_config! {
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     #[serde(default)]
     pub struct LineRendererConfig {
-        line_width: f32 = 1.0, 0.1, 10.0;
-        line_color: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
+        enabled: bool = true;
+        vector_width: f32 = 1.0, 0.1, 10.0;
+        vel_color: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct WaterConfig {
     pub sim: WaterSimConfig,
     pub render: WaterRenderConfig,

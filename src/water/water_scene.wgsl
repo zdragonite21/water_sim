@@ -37,8 +37,8 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     var view_orient: mat4x4<f32> = camera.view;
     view_orient[3] = vec4<f32>(0.0, 0.0, 0.0, 1.0);
 
-    var pos: vec4<f32> = transpose(view_orient) * vec4<f32>(model.position * water_config.particle_size, 1.0);
-    pos += vec4<f32>(instance.position, 1.0);
+    var billboard_offset = transpose(view_orient) * vec4<f32>(model.position * water_config.particle_size, 0.0);
+    var pos = vec4<f32>(instance.position, 1.0) + billboard_offset;
 
     out.clip_position = camera.proj * camera.view * pos;
     out.uv = model.uv;
