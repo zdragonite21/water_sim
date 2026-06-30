@@ -5,4 +5,4 @@ rustc-wrapper = "sccache"
 linker = 'C:\Users\Zachary\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\x86_64-pc-windows-msvc\bin\rust-lld.exe'
 
 [env]
-RUST_LOG="water_sim=info,wgpu=error"
+RUST_LOG="katara=info, wgpu=error"

@@ -161,11 +161,7 @@ impl WaterSim {
             particles,
             config.smoothing_radius,
             sample_point,
-            |neighbor_idx, _neighbor, _offset, dst| {
-                if neighbor_idx == particle_idx {
-                    return;
-                }
-
+            |_neighbor_idx, _neighbor, _offset, dst| {
                 let influence = Self::smoothing_kernel(config.smoothing_radius, dst);
                 density += config.mass * influence;
             },

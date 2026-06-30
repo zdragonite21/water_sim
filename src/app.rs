@@ -189,7 +189,8 @@ impl ApplicationHandler<State> for App {
 pub fn run() -> anyhow::Result<()> {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("katara=info"))
+            .init();
     }
     #[cfg(target_arch = "wasm32")]
     {

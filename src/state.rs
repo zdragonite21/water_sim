@@ -235,7 +235,7 @@ impl State {
         };
 
         match key {
-            KeyCode::F12 => {
+            KeyCode::F2 => {
                 self.gui.toggle_debug_text();
                 true
             }
