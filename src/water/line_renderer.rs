@@ -223,7 +223,6 @@ impl LineRenderer {
         &mut self,
         origin: Point3<f32>,
         vector: Vector3<f32>,
-        scale: f32,
         line_type: VectorType,
     ) {
         if vector.magnitude2() <= f32::EPSILON {
@@ -231,22 +230,23 @@ impl LineRenderer {
         }
 
         let mag = vector.magnitude();
-        let end = origin + (vector / mag) * scale;
 
         let color;
-        let width_px;
 
         match line_type {
             VectorType::Velocity => {
                 color = self.config.vel_color;
-                width_px = self.config.vector_width;
             }
             VectorType::Force => {
                 let x = mag / (mag + 1.0);
-                color = [x, x, 0.0, 1.0];
-                width_px = self.config.vector_width;
+                color = [x, x, 0.0, 1.0];                
             }
         }
+
+        let scale = self.config.vector_scale;
+        let width_px = self.config.vector_width;
+
+        let end = origin + (vector / mag) * scale;
 
         self.push_line(Line3d {
             start: origin,

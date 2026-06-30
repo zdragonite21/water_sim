@@ -102,6 +102,7 @@ inspect_config! {
     pub struct LineRendererConfig {
         enabled: bool = true;
         vector_width: f32 = 1.0, 0.1, 10.0;
+        vector_scale: f32 = 0.5, 0.01, 5.0;
         vel_color: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
     }
 }

@@ -23,8 +23,9 @@ particle_size = 0.5609999895095825
 target_density = 0.10000000149011612
 
 [water.line_renderer]
-enabled = false
+enabled = true
 vector_width = 1.4830000400543213
+vector_scale = 0.5910000205039978
 vel_color = [
     0.0,
     1.0,

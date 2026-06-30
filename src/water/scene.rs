@@ -18,7 +18,6 @@ impl WaterScene {
     const FIXED_FPS: u64 = 120;
     const MAX_STEPS: u8 = 8;
     const EXTRA_LINE_CAPACITY: usize = 12;
-    const VELOCITY_LINE_SCALE: f32 = 0.5;
 
     pub async fn new(
         device: &wgpu::Device,
@@ -152,7 +151,6 @@ impl WaterScene {
             self.line_renderer.push_vector(
                 particle.pos,
                 particle.vel,
-                Self::VELOCITY_LINE_SCALE,
                 VectorType::Velocity,
             );
         }
