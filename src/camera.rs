@@ -262,6 +262,8 @@ pub struct CameraRig {
 }
 
 impl CameraRig {
+    const MAX_FRAME_DT: Duration = Duration::from_millis(120);
+
     pub fn new(device: &wgpu::Device, width: u32, height: u32, config: &CameraConfig) -> Self {
         let camera = Camera::new(config);
         let projection = Projection::new(width, height, cgmath::Deg(45.0), 0.1, 100.0);
@@ -311,6 +313,7 @@ impl CameraRig {
     }
 
     pub fn update(&mut self, queue: &wgpu::Queue, dt: Duration) {
+        let dt = dt.min(Self::MAX_FRAME_DT);
         self.controller.update_camera(&mut self.camera, dt);
         self.uniform
             .update_view_proj(&self.camera, &self.projection);

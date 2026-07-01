@@ -5,8 +5,8 @@ mouse_sens = 0.0020000000949949026
 scroll_sens = 0.10000000149011612
 
 [window]
-width = 1708
-height = 1180
+width = 1677
+height = 1347
 
 [water.sim]
 gravity = 0.0
