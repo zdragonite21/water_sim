@@ -2,7 +2,7 @@ use crate::{
     config::DebugOverlayConfig,
     util::bounds::Bounds3,
     water::{
-        line_batch::{Line3d, LineBatch},
+        line_batch::LineBatch,
         line_renderer::LineRenderer,
         sim::Particle,
     },

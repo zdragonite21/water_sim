@@ -2,7 +2,7 @@ use crate::{
     config::WaterConfig,
     water::{debug_overlay::DebugOverlay, renderer::WaterRenderer, sim::WaterSim},
 };
-use cgmath::{Matrix4, Vector3};
+use cgmath::Matrix4;
 
 pub struct WaterScene {
     sim: WaterSim,

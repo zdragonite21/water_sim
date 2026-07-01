@@ -24,6 +24,12 @@ pub struct App {
     config: AppConfig,
 }
 
+impl Default for App {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl App {
     pub fn new(#[cfg(target_arch = "wasm32")] event_loop: &EventLoop<State>) -> Self {
         #[cfg(target_arch = "wasm32")]
@@ -123,14 +129,10 @@ impl ApplicationHandler<State> for App {
             None => return,
         };
 
-        match event {
-            DeviceEvent::MouseMotion { delta } => {
-                if state.camera.controller.is_captured() {
-                    state.camera.controller.handle_mouse(delta.0, delta.1);
-                }
+        if let DeviceEvent::MouseMotion { delta } = event
+            && state.camera.controller.is_captured() {
+                state.camera.controller.handle_mouse(delta.0, delta.1);
             }
-            _ => (),
-        }
     }
 
     fn window_event(
