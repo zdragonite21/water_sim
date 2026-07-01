@@ -154,13 +154,9 @@ impl LineRenderer {
             return;
         }
 
-        let mut instance_data = Vec::with_capacity(lines.len());
+        let mut instance_data = Vec::with_capacity(lines.len().min(self.capacity));
 
         for line in lines {
-            if self.visible_line_count >= self.capacity {
-                break;
-            }
-
             let screen_line = Line3d {
                 start: view_proj.transform_point(line.start),
                 end: view_proj.transform_point(line.end),
@@ -173,6 +169,11 @@ impl LineRenderer {
             {
                 continue;
             }
+
+            if self.visible_line_count >= self.capacity {
+                break;
+            }
+
             instance_data.push(LineInstanceRaw::from_line(&screen_line));
             self.visible_line_count += 1;
         }
@@ -185,13 +186,13 @@ impl LineRenderer {
             );
         }
 
-        let skipped_lines = lines.len() - self.visible_line_count;
+        let capacity_skipped_line_count = lines.len().saturating_sub(self.capacity);
 
-        if skipped_lines > 0 {
+        if capacity_skipped_line_count > 0 {
             log::warn!(
                 "LineRenderer capacity {} exceeded; skipped {} lines",
                 self.capacity,
-                skipped_lines
+                capacity_skipped_line_count
             );
         }
     }

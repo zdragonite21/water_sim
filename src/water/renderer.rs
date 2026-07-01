@@ -4,7 +4,7 @@ use crate::{
         model::{Mesh, SimpleVertex, Vertex},
         texture::Texture,
     },
-    water::sim::{Particle, WaterSim},
+    water::sim::Particle,
 };
 
 use wgpu::util::DeviceExt;
@@ -231,10 +231,9 @@ impl WaterRenderer {
         self.config.clone()
     }
 
-    pub fn upload(&mut self, queue: &wgpu::Queue, sim: &WaterSim) {
+    pub fn upload_particles(&mut self, queue: &wgpu::Queue, particles: &[Particle]) {
         // convert sim particles/cells into GPU instance data
-        let instance_data = sim
-            .particles()
+        let instance_data = particles
             .iter()
             .map(InstanceRaw::from_particle)
             .collect::<Vec<_>>();
