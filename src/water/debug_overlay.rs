@@ -15,14 +15,14 @@ pub struct DebugOverlay {
 }
 
 impl DebugOverlay {
-    pub async fn new(
+    pub fn new(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
         line_capacity: usize,
         debug_overlay_config: &DebugOverlayConfig,
     ) -> anyhow::Result<Self> {
-        let line_renderer = LineRenderer::new(device, config, camera_layout, line_capacity).await?;
+        let line_renderer = LineRenderer::new(device, config, camera_layout, line_capacity)?;
 
         Ok(Self {
             config: debug_overlay_config.clone(),
@@ -35,12 +35,12 @@ impl DebugOverlay {
         self.line_renderer.resize(queue, config);
     }
 
-    pub fn rebuild_lines(&mut self, particles: &[Particle], size: &Vector3<f32>) -> &[Line3d] {
+    pub fn rebuild_lines(&mut self, particles: &[Particle], size: &Vector3<f32>){
         const EXTRA_LINE_CAPACITY: usize = 12;
         self.line_batch.clear();
         
         if !self.config.enabled {
-            return self.line_batch.lines();
+            return;
         }
 
         self.line_batch.reserve_exact(particles.len() + EXTRA_LINE_CAPACITY);
@@ -52,8 +52,6 @@ impl DebugOverlay {
         if self.config.bounds {
             self.add_bounds(size);
         }
-
-        self.line_batch.lines()
     }
 
     pub fn upload(&mut self, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {

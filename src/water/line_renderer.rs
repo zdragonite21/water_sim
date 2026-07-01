@@ -17,7 +17,7 @@ pub struct LineRenderer {
 }
 
 impl LineRenderer {
-    pub async fn new(
+    pub fn new(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,

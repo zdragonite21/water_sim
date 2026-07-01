@@ -104,5 +104,5 @@ inspect_config! {
 pub struct WaterConfig {
     pub sim: WaterSimConfig,
     pub render: WaterRenderConfig,
-    pub debug_config: DebugOverlayConfig,
+    pub debug: DebugOverlayConfig,
 }

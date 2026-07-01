@@ -33,17 +33,15 @@ impl WaterScene {
             bind_group_layout,
             water_config.sim.num_particles as usize,
             &water_config.render,
-        )
-        .await?;
+        )?;
 
         let debug_overlay = DebugOverlay::new(
             device,
             config,
             bind_group_layout,
             Self::line_capacity(water_config.sim.num_particles as usize),
-            &water_config.debug_config,
-        )
-        .await?;
+            &water_config.debug,
+        )?;
 
         Ok(Self {
             sim,
@@ -108,7 +106,7 @@ impl WaterScene {
     pub fn update_config(&mut self, queue: &wgpu::Queue, config: &WaterConfig) {
         self.sim.update_config(&config.sim);
         self.renderer.update_config(&config.render);
-        self.debug_overlay.update_config(&config.debug_config);
+        self.debug_overlay.update_config(&config.debug);
         self.renderer.update_uniforms(queue);
     }
 
@@ -116,7 +114,7 @@ impl WaterScene {
         WaterConfig {
             sim: self.sim.current_config(),
             render: self.renderer.current_config(),
-            debug_config: self.debug_overlay.current_config(),
+            debug: self.debug_overlay.current_config(),
         }
     }
 
@@ -135,12 +133,8 @@ impl WaterScene {
 
     fn upload_scene_data(&mut self, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {
         self.renderer.upload_particles(queue, self.sim.particles());
-        let size = Vector3::new(
-            self.sim.current_config().size_x,
-            self.sim.current_config().size_y,
-            0.0,
-        );
-        self.debug_overlay.rebuild_lines(self.sim.particles(), &size);
+        self.debug_overlay
+            .rebuild_lines(self.sim.particles(), &self.sim.bounds());
         self.debug_overlay.upload(queue, view_proj);
     }
 

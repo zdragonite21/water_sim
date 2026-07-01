@@ -70,6 +70,10 @@ impl WaterSim {
         self.config.clone()
     }
 
+    pub fn bounds(&self) -> Vector3<f32> {
+        Vector3::new(self.config.size_x, self.config.size_y, 0.0)
+    }
+
     pub fn update(&mut self, dt: instant::Duration) {
         let dt = dt.as_secs_f32();
 

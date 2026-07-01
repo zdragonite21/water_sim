@@ -75,7 +75,7 @@ pub struct WaterRenderer {
 }
 
 impl WaterRenderer {
-    pub async fn new(
+    pub fn new(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
