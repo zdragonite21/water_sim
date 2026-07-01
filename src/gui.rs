@@ -216,8 +216,8 @@ impl WaterPanel {
                 ui.text("Rendering");
                 water_config.render.inspect(ui);
                 ui.separator();
-                ui.text("Line Renderer");
-                water_config.line_renderer.inspect(ui);
+                ui.text("Debug Overlay");
+                water_config.debug_config.inspect(ui);
             });
     }
 }

@@ -99,11 +99,13 @@ inspect_config! {
 inspect_config! {
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     #[serde(default)]
-    pub struct LineRendererConfig {
+    pub struct DebugOverlayConfig {
         enabled: bool = true;
+        velocity_vectors: bool = true;
+        bounds: bool = true;
         vector_width: f32 = 1.0, 0.1, 10.0;
         vector_scale: f32 = 0.5, 0.01, 5.0;
-        vel_color: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
+        velocity_color: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
     }
 }
 
@@ -112,5 +114,5 @@ inspect_config! {
 pub struct WaterConfig {
     pub sim: WaterSimConfig,
     pub render: WaterRenderConfig,
-    pub line_renderer: LineRendererConfig,
+    pub debug_config: DebugOverlayConfig,
 }

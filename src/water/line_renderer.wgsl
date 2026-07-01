@@ -30,31 +30,6 @@ struct VertexOutput {
     @location(0) color: vec4<f32>,
 };
 
-// @vertex
-// fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
-//     var out: VertexOutput;
-
-//     let delta = instance.end - instance.start;
-//     var dir = vec3<f32>(1.0, 0.0, 0.0);
-//     let len = length(delta);
-//     if len > 0.00001 {
-//         dir = delta / len;
-//     }
-
-//     var normal = vec3<f32>(-dir.y, dir.x, 0.0);
-//     if length(normal) <= 0.00001 {
-//         normal = vec3<f32>(0.0, 1.0, 0.0);
-//     }
-//     normal = normalize(normal);
-
-//     let width_world = instance.width_px * 0.02;
-//     let world_pos = mix(instance.start, instance.end, model.uv.x)
-//         + normal * model.position.y * width_world;
-
-//     out.clip_position = camera.proj * camera.view * vec4<f32>(world_pos, 1.0);
-//     out.color = instance.color;
-//     return out;
-// }
 @vertex
 fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
     var out: VertexOutput;

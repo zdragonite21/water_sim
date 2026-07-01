@@ -1,26 +1,9 @@
 use crate::{
-    config::LineRendererConfig,
     render::model::{Mesh, SimpleVertex, Vertex},
+    water::line_batch::Line3d,
 };
-use cgmath::{InnerSpace, Matrix4, Point3, Transform, Vector3};
+use cgmath::{Matrix4, Point3, Transform};
 use wgpu::util::DeviceExt;
-
-pub struct Line3d {
-    pub start: Point3<f32>,
-    pub end: Point3<f32>,
-    pub color: [f32; 4],
-    pub width_px: f32,
-}
-
-#[allow(dead_code)]
-pub enum VectorType {
-    Velocity,
-    Force,
-}
-
-pub enum LineType {
-    Bounds,
-}
 
 pub struct LineRenderer {
     render_pipeline: wgpu::RenderPipeline,
@@ -30,10 +13,7 @@ pub struct LineRenderer {
     line_bind_group: wgpu::BindGroup,
     quad: Mesh,
     capacity: usize,
-    config: LineRendererConfig,
-    lines: Vec<Line3d>,
     visible_line_count: usize,
-    skipped_lines: usize,
 }
 
 impl LineRenderer {
@@ -42,7 +22,6 @@ impl LineRenderer {
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
         capacity: usize,
-        line_config: &LineRendererConfig,
     ) -> anyhow::Result<Self> {
         let shader = device.create_shader_module(wgpu::include_wgsl!("line_renderer.wgsl"));
 
@@ -136,10 +115,7 @@ impl LineRenderer {
             line_bind_group,
             quad,
             capacity,
-            config: line_config.clone(),
-            lines: Vec::with_capacity(capacity),
             visible_line_count: 0,
-            skipped_lines: 0,
         })
     }
 
@@ -168,131 +144,38 @@ impl LineRenderer {
         }
 
         self.capacity = capacity;
-        self.lines = Vec::with_capacity(capacity);
-        self.visible_line_count = 0;
         self.instance_buffer = Self::new_instance_buffer(device, capacity);
     }
 
-    pub fn clear(&mut self) {
-        self.lines.clear();
-        self.visible_line_count = 0;
-        self.skipped_lines = 0;
-    }
-
-    pub fn enabled(&self) -> bool {
-        self.config.enabled
-    }
-
-    pub fn push_line(&mut self, line: Line3d) {
-        if !self.config.enabled {
-            return;
-        }
-
-        if self.lines.len() >= self.capacity {
-            self.skipped_lines += 1;
-            return;
-        }
-
-        self.lines.push(line);
-    }
-
-    pub fn push_segment(&mut self, start: Point3<f32>, end: Point3<f32>, line_type: LineType) {
-        if (end - start).magnitude2() <= f32::EPSILON {
-            return;
-        }
-
-        let color;
-        let width_px;
-
-        match line_type {
-            LineType::Bounds => {
-                color = [1.0, 1.0, 0.0, 1.0];
-                width_px = 3.0;
-            }
-        }
-
-        self.push_line(Line3d {
-            start,
-            end,
-            color,
-            width_px,
-        });
-    }
-
-    pub fn push_vector(
-        &mut self,
-        origin: Point3<f32>,
-        vector: Vector3<f32>,
-        line_type: VectorType,
-    ) {
-        if vector.magnitude2() <= f32::EPSILON {
-            return;
-        }
-
-        let mag = vector.magnitude();
-
-        let color;
-
-        match line_type {
-            VectorType::Velocity => {
-                color = self.config.vel_color;
-            }
-            VectorType::Force => {
-                let x = mag / (mag + 1.0);
-                color = [x, x, 0.0, 1.0];                
-            }
-        }
-
-        let scale = self.config.vector_scale;
-        let width_px = self.config.vector_width;
-
-        let end = origin + (vector / mag) * scale;
-
-        self.push_line(Line3d {
-            start: origin,
-            end,
-            color,
-            width_px,
-        });
-    }
-
-    pub fn update_config(&mut self, config: &LineRendererConfig) {
-        if config == &self.config {
-            return;
-        }
-
-        self.config = config.clone();
-    }
-
-    pub fn current_config(&self) -> LineRendererConfig {
-        self.config.clone()
-    }
-
-    pub fn upload(&mut self, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {
+    pub fn upload(&mut self, queue: &wgpu::Queue, lines: &[Line3d], view_proj: &Matrix4<f32>) {
         self.visible_line_count = 0;
 
-        if !self.config.enabled || self.lines.is_empty() {
+        if lines.is_empty() {
             return;
         }
 
-        let mut instance_data = Vec::with_capacity(self.lines.len());
+        let mut instance_data = Vec::with_capacity(lines.len());
 
-        for line in &self.lines {
+        for line in lines {
+            if self.visible_line_count >= self.capacity {
+                break;
+            }
+
             let screen_line = Line3d {
                 start: view_proj.transform_point(line.start),
                 end: view_proj.transform_point(line.end),
                 color: line.color,
                 width_px: line.width_px,
             };
+
             if !Self::is_point_visible(screen_line.start)
                 || !Self::is_point_visible(screen_line.end)
             {
                 continue;
             }
             instance_data.push(LineInstanceRaw::from_line(&screen_line));
+            self.visible_line_count += 1;
         }
-
-        self.visible_line_count = instance_data.len();
 
         if !instance_data.is_empty() {
             queue.write_buffer(
@@ -302,11 +185,13 @@ impl LineRenderer {
             );
         }
 
-        if self.skipped_lines > 0 {
+        let skipped_lines = lines.len() - self.visible_line_count;
+
+        if skipped_lines > 0 {
             log::warn!(
                 "LineRenderer capacity {} exceeded; skipped {} lines",
                 self.capacity,
-                self.skipped_lines
+                skipped_lines
             );
         }
     }
@@ -324,7 +209,7 @@ impl LineRenderer {
         target_view: &wgpu::TextureView,
         camera_bind_group: &wgpu::BindGroup,
     ) -> anyhow::Result<()> {
-        if !self.config.enabled || self.visible_line_count == 0 {
+        if self.visible_line_count == 0 {
             return Ok(());
         }
 
