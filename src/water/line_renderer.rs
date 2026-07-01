@@ -147,6 +147,10 @@ impl LineRenderer {
         self.instance_buffer = Self::new_instance_buffer(device, capacity);
     }
 
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
+
     pub fn upload(&mut self, queue: &wgpu::Queue, lines: &[Line3d], view_proj: &Matrix4<f32>) {
         self.visible_line_count = 0;
 

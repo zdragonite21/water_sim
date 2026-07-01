@@ -329,7 +329,8 @@ impl State {
             &mut water_config,
         )?;
 
-        self.scene.update_config(&self.queue, &water_config);
+        self.scene
+            .update_config(&self.device, &self.queue, &water_config);
 
         self.queue.submit([encoder.finish()]);
         output.present();

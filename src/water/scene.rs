@@ -16,7 +16,6 @@ pub struct WaterScene {
 impl WaterScene {
     const SIM_HZ: u64 = 120;
     const MAX_STEPS: u8 = 8;
-    const EXTRA_LINE_CAPACITY: usize = 12;
 
     pub async fn new(
         device: &wgpu::Device,
@@ -39,7 +38,12 @@ impl WaterScene {
             device,
             config,
             bind_group_layout,
-            Self::line_capacity(water_config.sim.num_particles as usize),
+            DebugOverlay::required_capacity_for_config(
+                &water_config.debug,
+                sim.particles().len(),
+                &sim.bounds(),
+                water_config.sim.smoothing_radius,
+            ),
             &water_config.debug,
         )?;
 
@@ -99,14 +103,19 @@ impl WaterScene {
         self.sim.reset();
         let particle_count = self.sim.particles().len();
         self.renderer.resize_instance_buffer(device, particle_count);
-        self.debug_overlay
-            .resize_capacity(device, Self::line_capacity(particle_count));
+        self.resize_debug_overlay_capacity(device);
     }
 
-    pub fn update_config(&mut self, queue: &wgpu::Queue, config: &WaterConfig) {
+    pub fn update_config(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        config: &WaterConfig,
+    ) {
         self.sim.update_config(&config.sim);
         self.renderer.update_config(&config.render);
         self.debug_overlay.update_config(&config.debug);
+        self.resize_debug_overlay_capacity(device);
         self.renderer.update_uniforms(queue);
     }
 
@@ -133,12 +142,21 @@ impl WaterScene {
 
     fn upload_scene_data(&mut self, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {
         self.renderer.upload_particles(queue, self.sim.particles());
-        self.debug_overlay
-            .rebuild_lines(self.sim.particles(), &self.sim.bounds());
+        self.debug_overlay.rebuild_lines(
+            self.sim.particles(),
+            &self.sim.bounds(),
+            self.sim.current_config().smoothing_radius,
+        );
         self.debug_overlay.upload(queue, view_proj);
     }
 
-    fn line_capacity(particle_count: usize) -> usize {
-        particle_count.saturating_add(Self::EXTRA_LINE_CAPACITY)
+    fn resize_debug_overlay_capacity(&mut self, device: &wgpu::Device) {
+        let bounds = self.sim.bounds();
+        let capacity = self.debug_overlay.required_capacity(
+            self.sim.particles().len(),
+            &bounds,
+            self.sim.current_config().smoothing_radius,
+        );
+        self.debug_overlay.resize_capacity(device, capacity);
     }
 }
