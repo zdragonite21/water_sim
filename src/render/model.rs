@@ -103,12 +103,12 @@ impl Mesh {
         });
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some(&format!("{:?} Index Buffer", name)),
-            contents: bytemuck::cast_slice(&indices),
+            contents: bytemuck::cast_slice(indices),
             usage: wgpu::BufferUsages::INDEX,
         });
 
         Self {
-            name: name,
+            name,
             vertex_buffer,
             index_buffer,
             num_elements: indices.len() as u32,

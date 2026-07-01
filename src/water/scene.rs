@@ -134,13 +134,13 @@ impl WaterScene {
     }
 
     fn upload_scene_data(&mut self, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {
-        self.renderer.upload_particles(queue, &self.sim.particles());
+        self.renderer.upload_particles(queue, self.sim.particles());
         let size = Vector3::new(
             self.sim.current_config().size_x,
             self.sim.current_config().size_y,
             0.0,
         );
-        self.debug_overlay.rebuild_lines(&self.sim.particles(), &size);
+        self.debug_overlay.rebuild_lines(self.sim.particles(), &size);
         self.debug_overlay.upload(queue, view_proj);
     }
 

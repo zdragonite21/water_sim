@@ -3,7 +3,7 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     #[serde(default)]
     pub camera: CameraConfig,
@@ -17,16 +17,6 @@ pub struct AppConfig {
 pub struct WindowConfig {
     pub width: u32,
     pub height: u32,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            camera: CameraConfig::default(),
-            window: WindowConfig::default(),
-            water: WaterConfig::default(),
-        }
-    }
 }
 
 impl Default for WindowConfig {

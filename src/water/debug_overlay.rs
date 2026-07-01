@@ -40,7 +40,7 @@ impl DebugOverlay {
         self.line_batch.clear();
         
         if !self.config.enabled {
-            return &self.line_batch.lines();
+            return self.line_batch.lines();
         }
 
         self.line_batch.reserve_exact(particles.len() + EXTRA_LINE_CAPACITY);
@@ -53,7 +53,7 @@ impl DebugOverlay {
             self.add_bounds(size);
         }
 
-        &self.line_batch.lines()
+        self.line_batch.lines()
     }
 
     pub fn upload(&mut self, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {
