@@ -82,7 +82,7 @@ impl WaterRenderer {
         num_instances: usize,
         render_config: &WaterRenderConfig,
     ) -> anyhow::Result<Self> {
-        let shader = device.create_shader_module(wgpu::include_wgsl!("water_scene.wgsl"));
+        let shader = device.create_shader_module(wgpu::include_wgsl!("water.wgsl"));
 
         let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 

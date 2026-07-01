@@ -88,18 +88,20 @@ impl DebugOverlay {
     }
 
     fn add_bounds(&mut self, size: &Vector3<f32>) {
+        const BOUND_COLOR: [f32; 4] = [1.0, 1.0, 0.0, 1.0];
+        const BOUND_WIDTH: f32 = 2.0;
         let half_extent = size * 0.5;
         let bounds = Bounds3::from_half_extent(Point3::new(0.0, 0.0, 0.0), half_extent);
-        self.add_box(&bounds);
+        self.add_box(&bounds, BOUND_COLOR, BOUND_WIDTH);
     }
 
-    fn add_box(&mut self, bounds: &Bounds3) {
+    fn add_box(&mut self, bounds: &Bounds3, color: [f32; 4], width_px: f32) {
         for (start, end) in bounds.edge_segments() {
             self.line_batch.push_segment(
                 start,
                 end,
-                self.config.velocity_color,
-                self.config.vector_width,
+                color,
+                width_px,
             );
         }
     }

@@ -23,7 +23,7 @@ impl LineRenderer {
         camera_layout: &wgpu::BindGroupLayout,
         capacity: usize,
     ) -> anyhow::Result<Self> {
-        let shader = device.create_shader_module(wgpu::include_wgsl!("line_renderer.wgsl"));
+        let shader = device.create_shader_module(wgpu::include_wgsl!("line.wgsl"));
 
         let line_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
