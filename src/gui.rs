@@ -1,4 +1,4 @@
-use crate::{camera::Camera, config::WaterConfig, inspect::Inspect};
+use crate::{camera::Camera, config::WaterConfig, inspect::Inspect, stats::DebugStatsGroup};
 use wgpu::{Device, Queue, TextureFormat};
 use winit::event::Event;
 use winit::window::Window;
@@ -77,13 +77,14 @@ impl Gui {
         window: &Window,
         camera: &mut Camera,
         water_config: &mut WaterConfig,
+        stats_groups: &[DebugStatsGroup<'_>],
     ) -> anyhow::Result<()> {
         self.context.io_mut().update_delta_time(dt);
         self.platform.prepare_frame(self.context.io_mut(), window)?;
 
         let ui = self.context.frame();
 
-        self.debug_text.draw(ui);
+        self.debug_text.draw(ui, stats_groups);
         self.camera.draw(ui, camera);
         self.water.draw(ui, water_config);
 
@@ -125,11 +126,7 @@ impl DebugText {
         self.open = !self.open;
     }
 
-    fn draw(&mut self, ui: &imgui::Ui) {
-        if !self.open {
-            return;
-        }
-
+    fn draw(&mut self, ui: &imgui::Ui, stats_groups: &[DebugStatsGroup<'_>]) {
         let _window_bg = ui.push_style_color(imgui::StyleColor::WindowBg, [0.0, 0.0, 0.0, 0.0]);
         let _border = ui.push_style_color(imgui::StyleColor::Border, [0.0, 0.0, 0.0, 0.0]);
         let _padding = ui.push_style_var(imgui::StyleVar::WindowPadding([0.0, 0.0]));
@@ -144,6 +141,20 @@ impl DebugText {
             .save_settings(false)
             .build(|| {
                 draw_text_with_bg(ui, &format!("FPS: {:.1}", ui.io().framerate));
+
+                if self.open {
+                    let mut lines = Vec::new();
+
+                    for (label, stats) in stats_groups {
+                        draw_text_with_bg(ui, &format!("[{label}]"));
+
+                        lines.clear();
+                        stats.append_debug_lines(&mut lines);
+                        for line in &lines {
+                            draw_text_with_bg(ui, line);
+                        }
+                    }
+                }
             });
     }
 }

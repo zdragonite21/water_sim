@@ -13,7 +13,7 @@ gravity = 0.0
 num_particles = 1604
 size_x = 26.645000457763672
 size_y = 25.964000701904297
-smoothing_radius = 0.4970000088214874
+smoothing_radius = 1.9880000352859497
 target_density = 0.5
 pressure_multiplier = 215.24400329589844
 mass = 1.0
@@ -28,10 +28,10 @@ velocity_vectors = true
 bounds = true
 spatial_grid = true
 vector_width = 1.2410000562667847
-vector_scale = 0.3479999899864197
+vector_scale = 0.45899999141693115
 velocity_color = [
     0.0,
-    0.5,
+    0.501960813999176,
     1.0,
     1.0,
 ]

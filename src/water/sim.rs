@@ -4,7 +4,16 @@ use cgmath::{InnerSpace, Point3, Vector3};
 use rand::RngExt;
 use rand::rngs::ThreadRng;
 
-use crate::config::WaterSimConfig;
+use crate::{config::WaterSimConfig, stats::debug_stats};
+
+debug_stats! {
+    #[derive(Debug, Clone)]
+    pub struct WaterSimStats {
+        stat avg_density: f32 = 0.0;
+        stat particle_count: usize = 0;
+    }
+}
+
 pub struct Particle {
     pub pos: Point3<f32>,
     pub vel: Vector3<f32>,
@@ -60,6 +69,21 @@ impl WaterSim {
         }
 
         self.config = config.clone();
+    }
+
+    pub fn get_stats(&self) -> WaterSimStats {
+        let particle_count = self.particles.len();
+        let density_sum: f32 = self.particles.iter().map(|p| p.density).sum();
+        let avg_density = if particle_count > 0 {
+            density_sum / particle_count as f32
+        } else {
+            0.0
+        };
+
+        WaterSimStats {
+            avg_density,
+            particle_count,
+        }
     }
 
     pub fn reset(&mut self) {

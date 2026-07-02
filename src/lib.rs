@@ -8,5 +8,6 @@ mod gui;
 mod inspect;
 mod render;
 mod state;
-mod water;
+mod stats;
 mod util;
+mod water;
