@@ -219,6 +219,10 @@ impl State {
     }
 
     pub fn handle_shortcut(&mut self, event: &WindowEvent) -> bool {
+        if self.gui_wants_keyboard() {
+            return false;
+        }
+
         let WindowEvent::KeyboardInput {
             event:
                 KeyEvent {

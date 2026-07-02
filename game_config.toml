@@ -5,8 +5,8 @@ mouse_sens = 0.0020000000949949026
 scroll_sens = 0.10000000149011612
 
 [window]
-width = 1677
-height = 1347
+width = 2374
+height = 1168
 
 [water.sim]
 gravity = 0.0
@@ -30,7 +30,7 @@ enabled = true
 velocity = false
 bounds = true
 grid = false
-vector_width = 1.2410000562667847
+vector_width = 2.0
 vector_scale = 0.45899999141693115
 velocity_color = [
     0.0,

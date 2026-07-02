@@ -45,6 +45,7 @@ macro_rules! debug_stats {
 
         impl crate::stats::DebugStats for $name {
             fn append_debug_text_rows(&self, rows: &mut Vec<String>) {
+                let _ = &rows;
                 $(
                     rows.push(format!("{}: {}", stringify!($stat_field), self.$stat_field));
                 )*

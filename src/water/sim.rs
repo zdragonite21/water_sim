@@ -8,11 +8,10 @@ use crate::{config::WaterSimConfig, dwatch, stats::debug_stats};
 
 debug_stats! {
     #[derive(Debug, Clone)]
+    #[allow(dead_code)]
     pub struct WaterSimStats {
-        stat avg_density: f32 = 0.0;
-        stat exp_density: f32 = 0.0;
-        stat particle_count: usize = 0;
-        stat exp_neighbor_count: f32 = 0.0;
+        avg_density: f32 = 0.0;
+        particle_count: usize = 0;
     }
 }
 
@@ -82,17 +81,9 @@ impl WaterSim {
             0.0
         };
 
-        let volume = self.config.size[0] * self.config.size[1] * self.config.size[2];
-        let exp_density = particle_count as f32 * self.config.mass / volume;
-
-        let exp_neighbor_count =
-            PI * self.config.smoothing_radius.powi(2) * exp_density / self.config.mass;
-
         WaterSimStats {
             avg_density,
-            exp_density,
             particle_count,
-            exp_neighbor_count,
         }
     }
 
@@ -127,18 +118,45 @@ impl WaterSim {
     }
 
     fn compute_densities(&mut self) {
+        let particle_count = self.particles.len();
+        let mut density_total = 0.0;
+
         for i in 0..self.particles.len() {
             let density =
                 Self::calculate_density(&self.spatial_grid, &self.config, &self.particles, i);
-
+            density_total += density;
             self.particles[i].density = density;
         }
 
-        dwatch!(
-            "sim.avg_neighbor_count",
-            "{:.2}",
-            0
-        );
+        density_total /= particle_count as f32;
+        dwatch!("sim.avg_density", density_total);
+
+        let volume = self.config.size[0] * self.config.size[1] * self.config.size[2];
+        let exp_density = particle_count as f32 * self.config.mass / volume;
+        dwatch!("sim.exp_density", exp_density);
+
+        let mut avg_neighbor_count = 0.0;
+        for i in 0..self.particles.len() {
+            let mut neighbor_count = 0;
+            let sample_point = self.particles[i].pos;
+
+            self.spatial_grid.for_each_neighbor(
+                &self.particles,
+                self.config.smoothing_radius,
+                sample_point,
+                |_neighbor_idx, _neighbor, _offset, _dst| {
+                    neighbor_count += 1;
+                },
+            );
+
+            avg_neighbor_count += neighbor_count as f32;
+        }
+        avg_neighbor_count /= particle_count as f32;
+        dwatch!("sim.avg_neighbor_count", "{:.2}", avg_neighbor_count);
+
+        let exp_neighbor_count =
+            PI * self.config.smoothing_radius.powi(2) * exp_density / self.config.mass;
+        dwatch!("sim.exp_neighbor_count", "{:.2}", exp_neighbor_count);
     }
 
     fn apply_pressure_forces(&mut self, dt: f32) {
