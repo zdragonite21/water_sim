@@ -11,18 +11,12 @@ pub struct AppConfig {
     pub water: WaterConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WindowConfig {
-    pub width: u32,
-    pub height: u32,
-}
-
-impl Default for WindowConfig {
-    fn default() -> Self {
-        Self {
-            width: 1280,
-            height: 720,
-        }
+inspect_config! {
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[serde(default)]
+    pub struct WindowConfig {
+        width: u32 = 1280;
+        height: u32 = 720;
     }
 }
 
@@ -89,10 +83,10 @@ inspect_config! {
     #[serde(default)]
     pub struct DebugOverlayConfig {
         checkbox enabled: bool = true;
-        checkbox velocity_vectors: bool = true;
+        checkbox velocity: bool = true;
         checkbox bounds: bool = true;
-        checkbox spatial_grid: bool = true;
-        slider vector_width: f32 = 1.0, 0.1, 10.0;
+        checkbox grid: bool = true;
+        drag vector_width: f32 = 1.0, 0.1, 10.0;
         drag vector_scale: f32 = 0.5, 0.01, 5.0;
         color4 velocity_color: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
     }

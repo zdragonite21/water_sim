@@ -141,6 +141,9 @@ macro_rules! inspect_config {
 }
 
 macro_rules! inspect_config_draw_fields {
+    ($ui:ident, $self:ident,) => {
+        let _ = $ui;
+    };
     ($ui:ident, $self:ident,) => {};
     (
         $ui:ident,

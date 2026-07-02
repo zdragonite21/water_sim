@@ -64,7 +64,7 @@ impl DebugOverlay {
 
         let mut capacity = 0;
 
-        if config.velocity_vectors {
+        if config.velocity {
             capacity += particle_count;
         }
 
@@ -72,7 +72,7 @@ impl DebugOverlay {
             capacity += BOUNDS_LINE_COUNT;
         }
 
-        if config.spatial_grid {
+        if config.grid {
             capacity += Self::spatial_grid_line_count(size, radius);
         }
 
@@ -89,7 +89,7 @@ impl DebugOverlay {
         let capacity = self.required_capacity(particles.len(), size, radius);
         self.line_batch.reserve_exact(capacity);
 
-        if self.config.velocity_vectors {
+        if self.config.velocity {
             self.add_velocity_vectors(particles);
         }
 
@@ -97,7 +97,7 @@ impl DebugOverlay {
             self.add_bounds(size);
         }
 
-        if self.config.spatial_grid {
+        if self.config.grid {
             self.add_spatial_grid(size, radius);
         }
     }
