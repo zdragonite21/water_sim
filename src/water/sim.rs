@@ -4,7 +4,7 @@ use cgmath::{InnerSpace, Point3, Vector3};
 use rand::RngExt;
 use rand::rngs::ThreadRng;
 
-use crate::{config::WaterSimConfig, stats::debug_stats};
+use crate::{config::WaterSimConfig, dwatch, stats::debug_stats};
 
 debug_stats! {
     #[derive(Debug, Clone)]
@@ -12,7 +12,6 @@ debug_stats! {
         stat avg_density: f32 = 0.0;
         stat exp_density: f32 = 0.0;
         stat particle_count: usize = 0;
-        stat avg_neighbor_count: f32 = 0.0;
         stat exp_neighbor_count: f32 = 0.0;
     }
 }
@@ -86,25 +85,6 @@ impl WaterSim {
         let volume = self.config.size[0] * self.config.size[1] * self.config.size[2];
         let exp_density = particle_count as f32 * self.config.mass / volume;
 
-        let mut avg_neighbor_count = 0.0;
-
-        for p in &self.particles {
-            let mut neighbor_count = 0;
-            self.spatial_grid.for_each_neighbor(
-                &self.particles,
-                self.config.smoothing_radius,
-                p.pos,
-                |_neighbor_idx, _neighbor, _offset, _dst| {
-                    neighbor_count += 1;
-                },
-            );
-            avg_neighbor_count += neighbor_count as f32;
-        }
-
-        if particle_count > 0 {
-            avg_neighbor_count /= particle_count as f32;
-        }
-
         let exp_neighbor_count =
             PI * self.config.smoothing_radius.powi(2) * exp_density / self.config.mass;
 
@@ -112,7 +92,6 @@ impl WaterSim {
             avg_density,
             exp_density,
             particle_count,
-            avg_neighbor_count,
             exp_neighbor_count,
         }
     }
@@ -154,6 +133,12 @@ impl WaterSim {
 
             self.particles[i].density = density;
         }
+
+        dwatch!(
+            "sim.avg_neighbor_count",
+            "{:.2}",
+            0
+        );
     }
 
     fn apply_pressure_forces(&mut self, dt: f32) {

@@ -1,8 +1,6 @@
+use crate::debug_watch;
 use crate::{
-    camera::Camera,
-    config::WaterConfig,
-    inspect::Inspect,
-    stats::DebugStats,
+    camera::Camera, config::WaterConfig, inspect::Inspect, stats::DebugStats,
     water::scene::WaterSceneStats,
 };
 use wgpu::{Device, Queue, TextureFormat};
@@ -141,7 +139,7 @@ impl DebugText {
         ui.window("Debug Text")
             .position([10.0, 10.0], imgui::Condition::Always)
             .no_decoration()
-            .no_inputs()
+            // .no_inputs()
             .always_auto_resize(true)
             .draw_background(false)
             .save_settings(false)
@@ -155,6 +153,30 @@ impl DebugText {
                     scene_stats.sim.append_debug_text_rows(&mut rows);
                     for row in &rows {
                         draw_text_with_bg(ui, row);
+                    }
+
+                    let watches = debug_watch::snapshot();
+                    if !watches.is_empty() {
+                        let mut current_group: Option<&str> = None;
+                        for (name, entry) in watches {
+                            let (group, label) = name.split_once('.').unwrap_or(("misc", name));
+
+                            if current_group != Some(group) {
+                                current_group = Some(group);
+                                draw_text_with_bg(ui, &format!("[{}]", group));
+                            }
+         
+                            draw_text_with_bg(ui, &format!("{label}: {}", entry.value));
+                            
+                            if ui.is_item_hovered() {
+                                ui.tooltip(|| {
+                                    ui.text(format!(
+                                        "{}:{}\nlast seen frame: {}",
+                                        entry.file, entry.line, entry.last_seen_frame
+                                    ));
+                                });
+                            }
+                        }
                     }
                 }
             });

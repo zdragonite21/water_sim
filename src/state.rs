@@ -8,9 +8,7 @@ use winit::{
 };
 
 use crate::{
-    camera::CameraRig,
-    config::{AppConfig, WindowConfig},
-    water::scene::WaterScene,
+    camera::CameraRig, config::{AppConfig, WindowConfig}, debug_watch, water::scene::WaterScene,
 };
 use crate::{frame_clock::FrameClock, gui::Gui};
 
@@ -347,6 +345,7 @@ impl State {
 
     pub fn frame(&mut self) -> anyhow::Result<()> {
         self.frame_clock.tick();
+        debug_watch::begin_frame(self.frame_clock.frame_index);
         self.update(self.frame_clock.dt);
         self.render()
     }
