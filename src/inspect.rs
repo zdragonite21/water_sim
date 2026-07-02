@@ -45,16 +45,11 @@ macro_rules! inspect_config {
 
         impl crate::inspect::Inspect for $name {
             fn inspect(&mut self, ui: &imgui::Ui) {
-                $(
-                    $crate::inspect::inspect_config_draw_field!(
-                        ui,
-                        self,
-                        $widget,
-                        $draw_tt,
-                        $draw_field,
-                        $draw_default $($draw_extra)*
-                    );
-                )*
+                $crate::inspect::inspect_config_draw_fields!(
+                    ui,
+                    self,
+                    $(($widget, $draw_tt, $draw_field, $draw_default, [$($draw_extra)*]))*
+                );
             }
         }
     };
@@ -142,6 +137,49 @@ macro_rules! inspect_config {
             [$(($widget $draw_field $draw_tt $draw_default, [$($draw_extra)*]))*]
             $($rest)*
         }
+    };
+}
+
+macro_rules! inspect_config_draw_fields {
+    ($ui:ident, $self:ident,) => {};
+    (
+        $ui:ident,
+        $self:ident,
+        (checkbox, bool, $field:ident, $default:expr, [$($extra:tt)*])
+        (checkbox, bool, $next_field:ident, $next_default:expr, [$($next_extra:tt)*])
+        $($rest:tt)*
+    ) => {
+        $crate::inspect::inspect_config_draw_field!(
+            $ui,
+            $self,
+            checkbox,
+            bool,
+            $field,
+            $default $($extra)*
+        );
+        $ui.same_line();
+        $crate::inspect::inspect_config_draw_fields!(
+            $ui,
+            $self,
+            (checkbox, bool, $next_field, $next_default, [$($next_extra)*])
+            $($rest)*
+        );
+    };
+    (
+        $ui:ident,
+        $self:ident,
+        ($widget:ident, $tt:tt, $field:ident, $default:expr, [$($extra:tt)*])
+        $($rest:tt)*
+    ) => {
+        $crate::inspect::inspect_config_draw_field!(
+            $ui,
+            $self,
+            $widget,
+            $tt,
+            $field,
+            $default $($extra)*
+        );
+        $crate::inspect::inspect_config_draw_fields!($ui, $self, $($rest)*);
     };
 }
 
@@ -247,6 +285,7 @@ macro_rules! inspect_config_draw_field {
 
 pub(crate) use inspect_config;
 pub(crate) use inspect_config_draw_field;
+pub(crate) use inspect_config_draw_fields;
 
 #[cfg(test)]
 mod tests {
@@ -263,8 +302,10 @@ mod tests {
             drag ranged_u32: u32 = 5, 0, 10;
             drag ranged_i32: i32 = 0, -10, 10;
             checkbox enabled: bool = true;
+            checkbox visible: bool = false;
             color4 color: [f32; 4] = [0.0, 0.5, 1.0, 1.0];
             vector3 vector: [f32; 3] = [0.0, 1.0, 2.0], -10.0, 10.0;
+            checkbox trailing_checkbox: bool = true;
             hidden_value: f32 = 42.0;
         }
     }
@@ -274,6 +315,9 @@ mod tests {
         let config = MacroCoverageConfig::default();
 
         assert_eq!(config.hidden_value, 42.0);
+        assert!(config.enabled);
+        assert!(!config.visible);
+        assert!(config.trailing_checkbox);
 
         let text = toml::to_string(&config).unwrap();
         assert!(text.contains("hidden_value"));
