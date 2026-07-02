@@ -318,7 +318,6 @@ impl State {
 
         let mut water_config = self.scene.current_config();
         let scene_stats = self.scene.stats();
-        let stats_groups = scene_stats.groups();
 
         self.gui.render(
             self.frame_clock.dt,
@@ -329,7 +328,7 @@ impl State {
             &self.window,
             &mut self.camera.camera,
             &mut water_config,
-            &stats_groups,
+            &scene_stats,
         )?;
 
         self.scene

@@ -1,8 +1,6 @@
 pub trait DebugStats {
-    fn append_debug_lines(&self, lines: &mut Vec<String>);
+    fn append_debug_text_rows(&self, rows: &mut Vec<String>);
 }
-
-pub type DebugStatsGroup<'a> = (&'static str, &'a dyn DebugStats);
 
 macro_rules! debug_stats {
     (
@@ -46,9 +44,9 @@ macro_rules! debug_stats {
         }
 
         impl crate::stats::DebugStats for $name {
-            fn append_debug_lines(&self, lines: &mut Vec<String>) {
+            fn append_debug_text_rows(&self, rows: &mut Vec<String>) {
                 $(
-                    lines.push(format!("{}: {}", stringify!($stat_field), self.$stat_field));
+                    rows.push(format!("{}: {}", stringify!($stat_field), self.$stat_field));
                 )*
             }
         }

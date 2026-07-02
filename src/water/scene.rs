@@ -1,6 +1,5 @@
 use crate::{
     config::WaterConfig,
-    stats::DebugStatsGroup,
     water::{
         debug_overlay::DebugOverlay,
         renderer::WaterRenderer,
@@ -10,13 +9,7 @@ use crate::{
 use cgmath::Matrix4;
 
 pub struct WaterSceneStats {
-    sim: WaterSimStats,
-}
-
-impl WaterSceneStats {
-    pub fn groups(&self) -> Vec<DebugStatsGroup<'_>> {
-        vec![("Water Sim", &self.sim)]
-    }
+    pub sim: WaterSimStats,
 }
 
 pub struct WaterScene {
