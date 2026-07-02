@@ -119,7 +119,7 @@ struct DebugText {
 
 impl DebugText {
     fn new() -> Self {
-        Self { open: true }
+        Self { open: false }
     }
 
     fn toggle(&mut self) {
