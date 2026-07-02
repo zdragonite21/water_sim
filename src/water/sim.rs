@@ -10,7 +10,10 @@ debug_stats! {
     #[derive(Debug, Clone)]
     pub struct WaterSimStats {
         stat avg_density: f32 = 0.0;
+        stat exp_density: f32 = 0.0;
         stat particle_count: usize = 0;
+        stat avg_neighbor_count: f32 = 0.0;
+        stat exp_neighbor_count: f32 = 0.0;
     }
 }
 
@@ -46,8 +49,8 @@ impl WaterSim {
             let xi_2 = self.rng.random_range(-1.0..=1.0);
 
             let pos = Point3::new(
-                xi_1 * self.config.size_x * 0.5,
-                xi_2 * self.config.size_y * 0.5,
+                xi_1 * self.config.size[0] * 0.5,
+                xi_2 * self.config.size[1] * 0.5,
                 0.0,
             );
             particles.push(Particle {
@@ -80,14 +83,43 @@ impl WaterSim {
             0.0
         };
 
+        let volume = self.config.size[0] * self.config.size[1] * self.config.size[2];
+        let exp_density = particle_count as f32 * self.config.mass / volume;
+
+        let mut avg_neighbor_count = 0.0;
+
+        for p in &self.particles {
+            let mut neighbor_count = 0;
+            self.spatial_grid.for_each_neighbor(
+                &self.particles,
+                self.config.smoothing_radius,
+                p.pos,
+                |_neighbor_idx, _neighbor, _offset, _dst| {
+                    neighbor_count += 1;
+                },
+            );
+            avg_neighbor_count += neighbor_count as f32;
+        }
+
+        if particle_count > 0 {
+            avg_neighbor_count /= particle_count as f32;
+        }
+
+        let exp_neighbor_count =
+            PI * self.config.smoothing_radius.powi(2) * exp_density / self.config.mass;
+
         WaterSimStats {
             avg_density,
+            exp_density,
             particle_count,
+            avg_neighbor_count,
+            exp_neighbor_count,
         }
     }
 
     pub fn reset(&mut self) {
         self.create_particles();
+        self.rebuild_spatial_grid();
     }
 
     pub fn current_config(&self) -> WaterSimConfig {
@@ -95,7 +127,7 @@ impl WaterSim {
     }
 
     pub fn bounds(&self) -> Vector3<f32> {
-        Vector3::new(self.config.size_x, self.config.size_y, 0.0)
+        self.config.size.into()
     }
 
     pub fn update(&mut self, dt: instant::Duration) {
@@ -148,7 +180,7 @@ impl WaterSim {
     }
 
     fn resolve_collisions(config: &WaterSimConfig, p: &mut Particle) {
-        let half_bound_size = Vector3::new(config.size_x, config.size_y, 10.0) / 2.0;
+        let half_bound_size = Vector3::from(config.size) / 2.0;
         let damping = 0.5;
 
         if p.pos.x.abs() > half_bound_size.x {
@@ -328,6 +360,13 @@ impl SpatialGrid {
     ) where
         F: FnMut(usize, &Particle, Vector3<f32>, f32),
     {
+        if particles.is_empty()
+            || self.spatial_lookup.len() != particles.len()
+            || self.start_indices.len() != particles.len()
+        {
+            return;
+        }
+
         let (center_x, center_y) = Self::position_to_cell(sample_point, radius);
         let sq_radius = radius * radius;
 

@@ -11,12 +11,15 @@ height = 1347
 [water.sim]
 gravity = 0.0
 num_particles = 1604
-size_x = 26.645000457763672
-size_y = 25.964000701904297
-smoothing_radius = 1.9880000352859497
+size = [
+    20.0,
+    20.0,
+    1.0,
+]
+smoothing_radius = 3.052999973297119
 target_density = 0.5
 pressure_multiplier = 215.24400329589844
-mass = 1.0
+mass = 0.9459999799728394
 
 [water.render]
 particle_size = 0.5609999895095825
@@ -24,9 +27,9 @@ target_density = 0.10000000149011612
 
 [water.debug]
 enabled = true
-velocity_vectors = true
+velocity = false
 bounds = true
-spatial_grid = true
+grid = false
 vector_width = 1.2410000562667847
 vector_scale = 0.45899999141693115
 velocity_color = [

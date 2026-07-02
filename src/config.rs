@@ -60,8 +60,7 @@ inspect_config! {
     pub struct WaterSimConfig {
         slider gravity: f32 = 9.81;
         slider num_particles: u32 = 10000, 1000, 100000;
-        slider size_x: f32 = 20.0, 1.0, 100.0;
-        slider size_y: f32 = 20.0, 1.0, 100.0;
+        vector3 size: [f32; 3] = [20.0, 20.0, 1.0];
         slider smoothing_radius: f32 = 0.5, 0.01, 5.0;
         slider target_density: f32 = 1.0, 0.5, 20.0;
         slider pressure_multiplier: f32 = 0.0, 10.0, 1000.0;
