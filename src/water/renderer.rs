@@ -38,6 +38,7 @@ impl InstanceRaw {
     }
 }
 
+
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct WaterUniform {
@@ -55,9 +56,9 @@ impl WaterUniform {
         }
     }
 
-    pub fn update(&mut self, config: &WaterRenderConfig) {
+    pub fn update(&mut self, config: &WaterRenderConfig, target_density: f32) {
         self.particle_size = config.particle_size;
-        self.target_density = config.target_density;
+        self.target_density = target_density;
     }
 }
 
@@ -87,7 +88,7 @@ impl WaterRenderer {
         let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 
         let mut water_uniform = WaterUniform::new();
-        water_uniform.update(render_config);
+        water_uniform.update(render_config, 0.0);
 
         let water_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Water Uniform Buffer"),
@@ -218,8 +219,8 @@ impl WaterRenderer {
         self.config = config.clone();
     }
 
-    pub fn update_uniforms(&mut self, queue: &wgpu::Queue) {
-        self.water_uniform.update(&self.config);
+    pub fn update_uniforms(&mut self, queue: &wgpu::Queue, target_density: f32) {
+        self.water_uniform.update(&self.config, target_density);
         queue.write_buffer(
             &self.water_uniform_buffer,
             0,

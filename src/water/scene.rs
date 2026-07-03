@@ -124,7 +124,7 @@ impl WaterScene {
         self.renderer.update_config(&config.render);
         self.debug_overlay.update_config(&config.debug);
         self.resize_debug_overlay_capacity(device);
-        self.renderer.update_uniforms(queue);
+        self.renderer.update_uniforms(queue, config.sim.target_density);
     }
 
     pub fn current_config(&self) -> WaterConfig {

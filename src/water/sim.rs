@@ -119,21 +119,41 @@ impl WaterSim {
 
     fn compute_densities(&mut self) {
         let particle_count = self.particles.len();
-        let mut density_total = 0.0;
+        let mut dbg_density_total = 0.0;
+        let mut dbg_neighbor_total = 0;
 
         for i in 0..self.particles.len() {
-            let density =
-                Self::calculate_density(&self.spatial_grid, &self.config, &self.particles, i);
-            density_total += density;
+            let mut density = 0.0;
+            let sample_point = self.particles[i].pos;
+
+            dbg_neighbor_total += self.spatial_grid.for_each_neighbor(
+                &self.particles,
+                self.config.smoothing_radius,
+                sample_point,
+                |_neighbor_idx, _neighbor, _offset, dst| {
+                    let influence = Self::smoothing_kernel(self.config.smoothing_radius, dst);
+                    density += self.config.mass * influence;
+                },
+            );
             self.particles[i].density = density;
+
+            dbg_density_total += density;
         }
 
-        density_total /= particle_count as f32;
-        dwatch!("sim.avg_density", density_total);
+        dwatch!("sim.avg_density", dbg_density_total / particle_count as f32);
 
         let volume = self.config.size[0] * self.config.size[1] * self.config.size[2];
         let exp_density = particle_count as f32 * self.config.mass / volume;
         dwatch!("sim.exp_density", exp_density);
+
+        dwatch!(
+            "sim.avg_neighbor_count",
+            dbg_neighbor_total as f32 / particle_count as f32
+        );
+
+        let exp_neighbor_count =
+            PI * self.config.smoothing_radius.powi(2) * exp_density / self.config.mass;
+        dwatch!("sim.exp_neighbor_count", exp_neighbor_count);
     }
 
     fn apply_pressure_forces(&mut self, dt: f32) {
@@ -190,28 +210,6 @@ impl WaterSim {
         let f = radius * radius - dst * dst;
         let scale = -24.0 / (PI * radius.powf(8.0));
         scale * dst * f * f
-    }
-
-    fn calculate_density(
-        grid: &SpatialGrid,
-        config: &WaterSimConfig,
-        particles: &[Particle],
-        particle_idx: usize,
-    ) -> f32 {
-        let mut density = 0.0;
-        let sample_point = particles[particle_idx].pos;
-
-        grid.for_each_neighbor(
-            particles,
-            config.smoothing_radius,
-            sample_point,
-            |_neighbor_idx, _neighbor, _offset, dst| {
-                let influence = Self::smoothing_kernel(config.smoothing_radius, dst);
-                density += config.mass * influence;
-            },
-        );
-
-        density
     }
 
     fn calculate_pressure_force(
@@ -335,18 +333,21 @@ impl SpatialGrid {
         radius: f32,
         sample_point: Point3<f32>,
         mut f: F,
-    ) where
+    ) -> u32 
+    where
         F: FnMut(usize, &Particle, Vector3<f32>, f32),
     {
         if particles.is_empty()
             || self.spatial_lookup.len() != particles.len()
             || self.start_indices.len() != particles.len()
         {
-            return;
+            return 0;
         }
 
         let (center_x, center_y) = Self::position_to_cell(sample_point, radius);
         let sq_radius = radius * radius;
+
+        let mut num_neighbors = 0;
 
         for (off_x, off_y) in Self::CELL_OFFSETS {
             let key = Self::get_key_from_hash(
@@ -374,8 +375,11 @@ impl SpatialGrid {
                         offset,
                         sq_dist.sqrt(),
                     );
+                    num_neighbors += 1;
                 }
             }
         }
+
+        num_neighbors
     }
 }

@@ -58,13 +58,13 @@ inspect_config! {
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     #[serde(default)]
     pub struct WaterSimConfig {
-        slider gravity: f32 = 9.81;
-        slider num_particles: u32 = 10000, 1000, 100000;
+        drag gravity: f32 = 9.81, 0.1;
+        drag num_particles: u32 = 10000, 1000, 100000;
         vector3 size: [f32; 3] = [20.0, 20.0, 1.0];
-        slider smoothing_radius: f32 = 0.5, 0.01, 5.0;
-        slider target_density: f32 = 1.0, 0.5, 20.0;
-        slider pressure_multiplier: f32 = 0.0, 10.0, 1000.0;
-        slider mass: f32 = 1.0, 0.1, 10.0;
+        drag smoothing_radius: f32 = 0.5, 0.01, 5.0;
+        drag target_density: f32 = 1.0, 0.5, 20.0;
+        drag pressure_multiplier: f32 = 0.0, 10.0, 1000.0;
+        drag mass: f32 = 1.0, 0.1, 10.0;
     }
 }
 
@@ -73,7 +73,6 @@ inspect_config! {
     #[serde(default)]
     pub struct WaterRenderConfig {
         slider particle_size: f32 = 1.0, 0.05, 5.0;
-        slider target_density: f32 = 1.0, 0.1, 10.0;
     }
 }
 

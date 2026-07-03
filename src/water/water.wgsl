@@ -71,7 +71,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let denom = max(abs(water_config.target_density), 0.0001);
     let error = clamp((water_config.target_density - in.density) / denom, -1.0, 1.0);
 
-    let strength = pow(abs(error), 1.2);
+    let strength = pow(abs(error), 0.5);
 
     let color = select(
         mix(vec3(1.0), RED, strength),
