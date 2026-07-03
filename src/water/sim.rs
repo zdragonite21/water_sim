@@ -168,7 +168,7 @@ impl WaterSim {
             let density = self.particles[i].density.max(f32::EPSILON);
             let pressure_accel = pressure_force / density;
 
-            self.particles[i].vel = pressure_accel * dt;
+            self.particles[i].vel += pressure_accel * dt;
         }
     }
 
@@ -182,7 +182,7 @@ impl WaterSim {
 
     fn resolve_collisions(config: &WaterSimConfig, p: &mut Particle) {
         let half_bound_size = Vector3::from(config.size) / 2.0;
-        let damping = 0.5;
+        let damping = config.damping;
 
         if p.pos.x.abs() > half_bound_size.x {
             p.pos.x = p.pos.x.signum() * half_bound_size.x;
@@ -225,6 +225,8 @@ impl WaterSim {
         let mut density_gradient = Vector3::new(0.0, 0.0, 0.0);
         let sample_point = particles[particle_idx].pos;
 
+        let pressure = Self::convert_density_to_pressure(config, particles[particle_idx].density);
+
         grid.for_each_neighbor(
             particles,
             config.smoothing_radius,
@@ -241,8 +243,9 @@ impl WaterSim {
                 };
                 let slope = Self::smoothing_kernel_deriv(config.smoothing_radius, dst);
                 let density = neighbor.density.max(f32::EPSILON);
-                let pressure = Self::convert_density_to_pressure(config, neighbor.density);
-                density_gradient += pressure * dir * slope * config.mass / density;
+                let neighbor_pressure = Self::convert_density_to_pressure(config, density);
+                let shared_pressure = (pressure + neighbor_pressure) * 0.5;
+                density_gradient += shared_pressure * dir * slope * config.mass / density;
             },
         );
 

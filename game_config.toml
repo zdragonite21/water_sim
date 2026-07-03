@@ -9,17 +9,18 @@ width = 1723
 height = 1117
 
 [water.sim]
-gravity = 0.0
-num_particles = 3970
+gravity = 9.800000190734863
+num_particles = 2980
 size = [
-    20.0,
+    35.0,
     20.0,
     1.0,
 ]
-smoothing_radius = 1.6330000162124634
-target_density = 9.274999618530273
-pressure_multiplier = 940.5999755859375
-mass = 1.00600004196167
+smoothing_radius = 2.5810000896453857
+target_density = 4.204999923706055
+pressure_multiplier = 1000.0
+mass = 1.0
+damping = 0.05000000074505806
 
 [water.render]
 particle_size = 0.3190000057220459
