@@ -46,11 +46,11 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     return out;
 }
 
-const RED: vec4<f32> = vec4<f32>(1.0, 0.0, 0.0, 1.0);
-const BLUE: vec4<f32> = vec4<f32>(0.0, 0.0, 1.0, 1.0);
-const GREEN: vec4<f32> = vec4<f32>(0.0, 1.0, 0.0, 1.0);
-const WHITE: vec4<f32> = vec4<f32>(1.0, 1.0, 1.0, 1.0);
-const BLACK: vec4<f32> = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+const RED: vec3<f32> = vec3<f32>(1.0, 0.0, 0.0);
+const BLUE: vec3<f32> = vec3<f32>(0.0, 0.0, 1.0);
+const GREEN: vec3<f32> = vec3<f32>(0.0, 1.0, 0.0);
+const WHITE: vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
+const BLACK: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
@@ -68,20 +68,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var light_dir = normalize(vec3<f32>(0.0, 1.0, 1.0));
     var light_intensity: f32 = max(dot(nor, light_dir), 0.1);
 
-    var width = 0.1;
-    var error = smoothstep(0.0, water_config.target_density, in.density);
-    var color = select(
-        mix(
-            WHITE,
-            BLUE,
-            (error - 0.5) * 2.0
-        ),
-        mix(
-            RED,
-            WHITE,
-            error * 2.0
-        ),
-        error < 0.5
-    );;
-    return light_intensity * color;
+    let denom = max(abs(water_config.target_density), 0.0001);
+    let error = clamp((water_config.target_density - in.density) / denom, -1.0, 1.0);
+
+    let strength = pow(abs(error), 1.2);
+
+    let color = select(
+        mix(vec3(1.0), RED, strength),
+        mix(vec3(1.0), BLUE, strength),
+        error >= 0.0
+    );
+
+    return light_intensity * vec4(color, 1.0);
 }

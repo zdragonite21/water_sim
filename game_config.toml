@@ -16,14 +16,14 @@ size = [
     20.0,
     1.0,
 ]
-smoothing_radius = 1.9570000171661377
-target_density = 3.234999895095825
+smoothing_radius = 1.6829999685287476
+target_density = 4.084000110626221
 pressure_multiplier = 1000.0
-mass = 0.9459999799728394
+mass = 1.00600004196167
 
 [water.render]
-particle_size = 0.5609999895095825
-target_density = 1.4880000352859497
+particle_size = 0.4699999988079071
+target_density = 4.084000110626221
 
 [water.debug]
 enabled = true
