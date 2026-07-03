@@ -134,29 +134,6 @@ impl WaterSim {
         let volume = self.config.size[0] * self.config.size[1] * self.config.size[2];
         let exp_density = particle_count as f32 * self.config.mass / volume;
         dwatch!("sim.exp_density", exp_density);
-
-        let mut avg_neighbor_count = 0.0;
-        for i in 0..self.particles.len() {
-            let mut neighbor_count = 0;
-            let sample_point = self.particles[i].pos;
-
-            self.spatial_grid.for_each_neighbor(
-                &self.particles,
-                self.config.smoothing_radius,
-                sample_point,
-                |_neighbor_idx, _neighbor, _offset, _dst| {
-                    neighbor_count += 1;
-                },
-            );
-
-            avg_neighbor_count += neighbor_count as f32;
-        }
-        avg_neighbor_count /= particle_count as f32;
-        dwatch!("sim.avg_neighbor_count", "{:.2}", avg_neighbor_count);
-
-        let exp_neighbor_count =
-            PI * self.config.smoothing_radius.powi(2) * exp_density / self.config.mass;
-        dwatch!("sim.exp_neighbor_count", "{:.2}", exp_neighbor_count);
     }
 
     fn apply_pressure_forces(&mut self, dt: f32) {

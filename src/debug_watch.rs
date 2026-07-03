@@ -54,6 +54,7 @@ pub fn begin_frame(frame: u64) {
     WATCHES.lock().unwrap().frame = frame;
 }
 
+#[allow(unused)]
 #[macro_export]
 macro_rules! dwatch {
     ($name:literal, $fmt:literal, $($arg:tt)*) => {
