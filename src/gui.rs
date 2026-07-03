@@ -149,10 +149,12 @@ impl DebugText {
                 if self.open {
                     let mut rows = Vec::new();
 
-                    draw_text_with_bg(ui, "[Water Sim]");
                     scene_stats.sim.append_debug_text_rows(&mut rows);
-                    for row in &rows {
-                        draw_text_with_bg(ui, row);
+                    if !rows.is_empty() {
+                        draw_text_with_bg(ui, "[Water Sim]");
+                        for row in &rows {
+                            draw_text_with_bg(ui, row);
+                        }
                     }
 
                     let watches = debug_watch::snapshot();

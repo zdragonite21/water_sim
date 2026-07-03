@@ -328,9 +328,7 @@ impl SpatialGrid {
         // reverse order to get the first index
         for i in (0..particles.len()).rev() {
             let cell_key = self.spatial_lookup[i].cell_key;
-            if self.start_indices[cell_key] == usize::MAX {
-                self.start_indices[cell_key] = i;
-            }
+            self.start_indices[cell_key] = i;
         }
     }
 
