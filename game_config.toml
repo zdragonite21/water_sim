@@ -22,7 +22,7 @@ pressure_multiplier = 940.5999755859375
 mass = 1.00600004196167
 
 [water.render]
-particle_size = 0.4699999988079071
+particle_size = 0.3190000057220459
 
 [water.debug]
 enabled = true

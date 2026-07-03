@@ -163,6 +163,7 @@ impl WaterSim {
                 &self.config,
                 &self.particles,
                 i,
+                &mut self.rng,
             );
             let density = self.particles[i].density.max(f32::EPSILON);
             let pressure_accel = pressure_force / density;
@@ -198,18 +199,20 @@ impl WaterSim {
     }
 
     fn smoothing_kernel(radius: f32, dst: f32) -> f32 {
-        let volume = PI * radius.powf(8.0) / 4.0;
-        let value = (radius * radius - dst * dst).max(0.0);
-        value * value * value / volume
+        if dst >= radius {
+            return 0.0;
+        }
+        let volume = PI * radius.powf(4.0) / 6.0;
+        let off = radius - dst;
+        off * off / volume
     }
 
     fn smoothing_kernel_deriv(radius: f32, dst: f32) -> f32 {
         if dst >= radius {
             return 0.0;
         }
-        let f = radius * radius - dst * dst;
-        let scale = -24.0 / (PI * radius.powf(8.0));
-        scale * dst * f * f
+        let scale = 12.0 / (PI * radius.powf(4.0));
+        (dst - radius) * scale
     }
 
     fn calculate_pressure_force(
@@ -217,6 +220,7 @@ impl WaterSim {
         config: &WaterSimConfig,
         particles: &[Particle],
         particle_idx: usize,
+        rng: &mut ThreadRng,
     ) -> Vector3<f32> {
         let mut density_gradient = Vector3::new(0.0, 0.0, 0.0);
         let sample_point = particles[particle_idx].pos;
@@ -226,15 +230,19 @@ impl WaterSim {
             config.smoothing_radius,
             sample_point,
             |neighbor_idx, neighbor, offset, dst| {
-                if particle_idx == neighbor_idx || dst == 0.0 {
+                if particle_idx == neighbor_idx {
                     return;
                 }
 
-                let dir = offset / dst;
+                let dir = if dst == 0.0 {
+                    Self::random_unit_dir(rng)
+                } else {
+                    -offset / dst
+                };
                 let slope = Self::smoothing_kernel_deriv(config.smoothing_radius, dst);
                 let density = neighbor.density.max(f32::EPSILON);
                 let pressure = Self::convert_density_to_pressure(config, neighbor.density);
-                density_gradient += -pressure * dir * slope * config.mass / density;
+                density_gradient += pressure * dir * slope * config.mass / density;
             },
         );
 
@@ -244,6 +252,13 @@ impl WaterSim {
     fn convert_density_to_pressure(config: &WaterSimConfig, density: f32) -> f32 {
         let density_error = density - config.target_density;
         density_error * config.pressure_multiplier
+    }
+
+    fn random_unit_dir(rng: &mut ThreadRng) -> Vector3<f32> {
+        let theta = rng.random_range(0.0..=2.0 * PI);
+        let x = theta.cos();
+        let y = theta.sin();
+        Vector3::new(x, y, 0.0)
     }
 }
 
@@ -333,7 +348,7 @@ impl SpatialGrid {
         radius: f32,
         sample_point: Point3<f32>,
         mut f: F,
-    ) -> u32 
+    ) -> u32
     where
         F: FnMut(usize, &Particle, Vector3<f32>, f32),
     {
