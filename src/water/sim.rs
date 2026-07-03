@@ -269,8 +269,8 @@ impl WaterSim {
     }
 
     fn convert_density_to_pressure(config: &WaterSimConfig, density: f32) -> f32 {
-        let density_error = density - config.target_density;
-        (density_error * config.pressure_multiplier).max(0.0)
+        let density_error = (density - config.target_density).max(0.0);
+        density_error * config.pressure_multiplier
     }
 
     fn random_unit_dir(rng: &mut ThreadRng) -> Vector3<f32> {
@@ -384,8 +384,9 @@ impl SpatialGrid {
         let mut num_neighbors = 0;
 
         for (off_x, off_y) in Self::CELL_OFFSETS {
+            let curr_cell = (center_x + off_x, center_y + off_y);
             let key = Self::get_key_from_hash(
-                Self::hash_cell(center_x + off_x, center_y + off_y),
+                Self::hash_cell(curr_cell.0, curr_cell.1),
                 particles.len(),
             );
 
@@ -399,8 +400,14 @@ impl SpatialGrid {
                     break;
                 }
 
+                let neighbor_pos = particles[self.spatial_lookup[i].particle_idx].predicted;
+                let neighbor_cell = Self::position_to_cell(neighbor_pos, radius);
+                if neighbor_cell != curr_cell {
+                    continue;
+                }
+
                 let particle_idx = self.spatial_lookup[i].particle_idx;
-                let offset = particles[particle_idx].predicted - sample_point;
+                let offset = neighbor_pos - sample_point;
                 let sq_dist = offset.magnitude2();
                 if sq_dist < sq_radius {
                     f(
