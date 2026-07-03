@@ -18,7 +18,7 @@ size = [
 ]
 smoothing_radius = 0.6579999923706055
 target_density = 0.5
-pressure_multiplier = 10.0
+pressure_multiplier = 198.10000610351563
 mass = 1.0
 damping = 0.05000000074505806
 
@@ -27,7 +27,7 @@ particle_size = 0.1979999989271164
 
 [water.debug]
 enabled = true
-velocity = true
+velocity = false
 bounds = false
 grid = true
 vector_width = 2.0

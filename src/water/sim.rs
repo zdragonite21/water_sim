@@ -19,6 +19,7 @@ pub struct Particle {
     pub pos: Point3<f32>,
     pub vel: Vector3<f32>,
     pub density: f32,
+    pub predicted: Point3<f32>,
 }
 
 pub struct WaterSim {
@@ -59,6 +60,7 @@ impl WaterSim {
                 pos,
                 vel: Vector3::new(0.0, 0.0, 0.0),
                 density: 0.0,
+                predicted: Point3::new(0.0, 0.0, 0.0),
             });
         }
         self.particles = particles;
@@ -107,6 +109,8 @@ impl WaterSim {
     pub fn update(&mut self, dt: instant::Duration) {
         let dt = dt.as_secs_f32();
 
+        self.apply_gravity(dt);
+
         self.rebuild_spatial_grid();
 
         self.compute_densities();
@@ -114,6 +118,13 @@ impl WaterSim {
         self.apply_pressure_forces(dt);
 
         self.integrate_velocities(dt);
+    }
+
+    fn apply_gravity(&mut self, dt: f32) {
+        for p in &mut self.particles {
+            p.vel += -Vector3::unit_y() * self.config.gravity * dt;
+            p.predicted = p.pos + p.vel * dt;
+        }
     }
 
     fn rebuild_spatial_grid(&mut self) {
@@ -128,7 +139,7 @@ impl WaterSim {
 
         for i in 0..self.particles.len() {
             let mut density = 0.0;
-            let sample_point = self.particles[i].pos;
+            let sample_point = self.particles[i].predicted;
 
             dbg_neighbor_total += self.spatial_grid.for_each_neighbor(
                 &self.particles,
@@ -178,7 +189,6 @@ impl WaterSim {
 
     fn integrate_velocities(&mut self, dt: f32) {
         for p in &mut self.particles {
-            p.vel += -Vector3::unit_y() * self.config.gravity * dt;
             p.pos += p.vel * dt;
             Self::resolve_collisions(&self.config, p);
         }
@@ -227,7 +237,7 @@ impl WaterSim {
         rng: &mut ThreadRng,
     ) -> Vector3<f32> {
         let mut density_gradient = Vector3::new(0.0, 0.0, 0.0);
-        let sample_point = particles[particle_idx].pos;
+        let sample_point = particles[particle_idx].predicted;
 
         let pressure = Self::convert_density_to_pressure(config, particles[particle_idx].density);
 
@@ -310,7 +320,7 @@ impl SpatialGrid {
         self.start_indices.resize(particles.len(), usize::MAX);
 
         for i in 0..particles.len() {
-            let (cell_x, cell_y) = Self::position_to_cell(particles[i].pos, radius);
+            let (cell_x, cell_y) = Self::position_to_cell(particles[i].predicted, radius);
             let cell_key =
                 Self::get_key_from_hash(Self::hash_cell(cell_x, cell_y), particles.len());
             self.spatial_lookup[i] = GridEntry {
@@ -388,7 +398,7 @@ impl SpatialGrid {
                 }
 
                 let particle_idx = self.spatial_lookup[i].particle_idx;
-                let offset = particles[particle_idx].pos - sample_point;
+                let offset = particles[particle_idx].predicted - sample_point;
                 let sq_dist = offset.magnitude2();
                 if sq_dist < sq_radius {
                     f(
