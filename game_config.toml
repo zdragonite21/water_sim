@@ -19,11 +19,12 @@ size = [
 smoothing_radius = 0.3499999940395355
 target_density = 50.0
 pressure_multiplier = 403.6400146484375
+viscosity_strength = 2.0
 mass = 1.0
 damping = 0.05000000074505806
 
 [water.render]
-particle_size = 0.08100000023841858
+particle_size = 0.11100000143051147
 
 [water.debug]
 enabled = true

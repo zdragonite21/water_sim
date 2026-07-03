@@ -117,7 +117,7 @@ impl WaterSim {
 
         self.compute_densities();
 
-        self.apply_pressure_forces(dt);
+        self.apply_pressure_viscosity_forces(dt);
 
         self.integrate_velocities(dt);
     }
@@ -173,7 +173,7 @@ impl WaterSim {
         dwatch!("sim.exp_neighbor_count", exp_neighbor_count);
     }
 
-    fn apply_pressure_forces(&mut self, dt: f32) {
+    fn apply_pressure_viscosity_forces(&mut self, dt: f32) {
         for i in 0..self.particles.len() {
             let pressure_force = -Self::calculate_pressure_force(
                 &self.spatial_grid,
@@ -182,10 +182,17 @@ impl WaterSim {
                 i,
                 &mut self.rng,
             );
+            let viscosity_force = Self::calculate_viscosity_force(
+                &self.spatial_grid,
+                &self.config,
+                &self.particles,
+                i,
+            );
             let density = self.particles[i].density.max(f32::EPSILON);
             let pressure_accel = pressure_force / density;
+            let viscosity_accel = viscosity_force / density;
 
-            self.particles[i].vel += pressure_accel * dt;
+            self.particles[i].vel += (pressure_accel + viscosity_accel) * dt;
         }
     }
 
@@ -231,6 +238,15 @@ impl WaterSim {
         (dst - radius) * scale
     }
 
+    fn viscosity_smoothing_kernel(radius: f32, dst: f32) -> f32 {
+        if dst >= radius {
+            return 0.0;
+        }
+        let volume = PI * radius.powf(8.0) / 4.0;
+        let value = (radius * radius - dst * dst).max(0.0);
+        value * value * value / volume
+    }
+
     fn calculate_pressure_force(
         grid: &SpatialGrid,
         config: &WaterSimConfig,
@@ -266,6 +282,33 @@ impl WaterSim {
         );
 
         density_gradient
+    }
+
+    fn calculate_viscosity_force(
+        grid: &SpatialGrid,
+        config: &WaterSimConfig,
+        particles: &[Particle],
+        particle_idx: usize,
+    ) -> Vector3<f32> {
+        let mut viscosity = Vector3::new(0.0, 0.0, 0.0);
+        let sample_point = particles[particle_idx].predicted;
+
+        grid.for_each_neighbor(
+            particles,
+            config.smoothing_radius,
+            sample_point,
+            |neighbor_idx, neighbor, _offset, dst| {
+                if particle_idx == neighbor_idx {
+                    return;
+                }
+
+                let influence = Self::viscosity_smoothing_kernel(config.smoothing_radius, dst);
+                let velocity_diff = neighbor.vel - particles[particle_idx].vel;
+                viscosity += velocity_diff * influence;
+            },
+        );
+
+        viscosity * config.viscosity_strength
     }
 
     fn convert_density_to_pressure(config: &WaterSimConfig, density: f32) -> f32 {

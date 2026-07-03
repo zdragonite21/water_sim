@@ -64,6 +64,7 @@ inspect_config! {
         drag smoothing_radius: f32 = 0.5, 0.01, 5.0;
         drag target_density: f32 = 1.0, 0.5, 20.0;
         drag pressure_multiplier: f32 = 0.0, 10.0, 1000.0;
+        drag viscosity_strength: f32 = 0.1, 0.0, 10.0;
         drag mass: f32 = 1.0, 0.1, 10.0;
         drag damping: f32 = 0.05, 0.0, 1.0;
     }
