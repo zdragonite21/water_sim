@@ -42,15 +42,19 @@ impl WaterSim {
         let n = self.config.num_particles as usize;
         let mut particles = Vec::with_capacity(n);
 
-        for _ in 0..n {
-            let xi_1 = self.rng.random_range(-1.0..=1.0);
-            let xi_2 = self.rng.random_range(-1.0..=1.0);
+        let scale = 0.5;
 
-            let pos = Point3::new(
-                xi_1 * self.config.size[0] * 0.5,
-                xi_2 * self.config.size[1] * 0.5,
-                0.0,
-            );
+        let width = self.config.size[0] * scale;
+        let height = self.config.size[1] * scale;
+
+        let num_row = (n as f32 * width / height).sqrt().floor() as usize;
+        let num_col = (n as f32 * height / width).sqrt().floor() as usize;
+
+        for i in 0..n {
+            let x = (i % num_row) as f32 / num_row as f32 * width;
+            let y = (i / num_row) as f32 / num_col as f32 * height;
+
+            let pos = Point3::new(x as f32 - width / 2.0, y as f32 - height / 2.0, 0.0);
             particles.push(Particle {
                 pos,
                 vel: Vector3::new(0.0, 0.0, 0.0),
