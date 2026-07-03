@@ -29,6 +29,7 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
     @location(1) density: f32,
+    @location(2) velocity: vec3<f32>,
 };
 
 @vertex
@@ -43,6 +44,7 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     out.clip_position = camera.proj * camera.view * pos;
     out.uv = model.uv;
     out.density = instance.density;
+    out.velocity = instance.velocity;
     return out;
 }
 
@@ -68,16 +70,20 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var light_dir = normalize(vec3<f32>(0.0, 1.0, 1.0));
     var light_intensity: f32 = max(dot(nor, light_dir), 0.1);
 
-    let denom = max(abs(water_config.target_density), 0.0001);
-    let error = clamp((water_config.target_density - in.density) / denom, -1.0, 1.0);
+    // target density
+    // let denom = max(abs(water_config.target_density), 0.0001);
+    // let error = clamp((water_config.target_density - in.density) / denom, -1.0, 1.0);
 
-    let strength = pow(abs(error), 0.5);
+    // let strength = pow(abs(error), 0.5);
 
-    let color = select(
-        mix(vec3(1.0), RED, strength),
-        mix(vec3(1.0), BLUE, strength),
-        error >= 0.0
-    );
+    // let color = select(
+    //     mix(vec3(1.0), RED, strength),
+    //     mix(vec3(1.0), BLUE, strength),
+    //     error >= 0.0
+    // );
+    let mag = length(in.velocity);
+    let strength = mag / 10.0;
+    let color = mix(BLUE, RED, strength);
 
     return light_intensity * vec4(color, 1.0);
 }

@@ -30,6 +30,8 @@ pub struct WaterSim {
 }
 
 impl WaterSim {
+    const LOOK_AHEAD_FACTOR: f32 = 1.0 / 120.0;
+
     pub fn new(config: &WaterSimConfig) -> Self {
         Self {
             particles: Vec::new(),
@@ -123,7 +125,7 @@ impl WaterSim {
     fn apply_gravity(&mut self, dt: f32) {
         for p in &mut self.particles {
             p.vel += -Vector3::unit_y() * self.config.gravity * dt;
-            p.predicted = p.pos + p.vel * dt;
+            p.predicted = p.pos + p.vel * Self::LOOK_AHEAD_FACTOR;
         }
     }
 
@@ -268,7 +270,7 @@ impl WaterSim {
 
     fn convert_density_to_pressure(config: &WaterSimConfig, density: f32) -> f32 {
         let density_error = density - config.target_density;
-        density_error * config.pressure_multiplier
+        (density_error * config.pressure_multiplier).max(0.0)
     }
 
     fn random_unit_dir(rng: &mut ThreadRng) -> Vector3<f32> {
