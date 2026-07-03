@@ -5,33 +5,33 @@ mouse_sens = 0.0020000000949949026
 scroll_sens = 0.10000000149011612
 
 [window]
-width = 1723
-height = 1057
+width = 1600
+height = 1000
 
 [water.sim]
-gravity = 0.0
-num_particles = 4000
+gravity = 12.0
+num_particles = 4032
 size = [
-    35.0,
-    20.0,
+    16.0,
+    10.0,
     1.0,
 ]
-smoothing_radius = 1.2070000171661377
-target_density = 0.5
-pressure_multiplier = 435.70001220703125
+smoothing_radius = 0.3499999940395355
+target_density = 50.0
+pressure_multiplier = 403.6400146484375
 mass = 1.0
 damping = 0.05000000074505806
 
 [water.render]
-particle_size = 0.14100000262260437
+particle_size = 0.08100000023841858
 
 [water.debug]
 enabled = true
 velocity = false
 bounds = false
-grid = true
-vector_width = 2.494999885559082
-vector_scale = 0.2590000033378601
+grid = false
+vector_width = 1.3070000410079956
+vector_scale = 0.1599999964237213
 velocity_color = [
     0.0,
     0.501960813999176,

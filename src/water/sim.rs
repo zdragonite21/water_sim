@@ -269,7 +269,7 @@ impl WaterSim {
     }
 
     fn convert_density_to_pressure(config: &WaterSimConfig, density: f32) -> f32 {
-        let density_error = (density - config.target_density).max(0.0);
+        let density_error = density - config.target_density;
         density_error * config.pressure_multiplier
     }
 
@@ -385,10 +385,8 @@ impl SpatialGrid {
 
         for (off_x, off_y) in Self::CELL_OFFSETS {
             let curr_cell = (center_x + off_x, center_y + off_y);
-            let key = Self::get_key_from_hash(
-                Self::hash_cell(curr_cell.0, curr_cell.1),
-                particles.len(),
-            );
+            let key =
+                Self::get_key_from_hash(Self::hash_cell(curr_cell.0, curr_cell.1), particles.len());
 
             let cell_start_idx = self.start_indices[key];
             if cell_start_idx == usize::MAX {

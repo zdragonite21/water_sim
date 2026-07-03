@@ -28,7 +28,7 @@ pub struct Camera {
 impl Default for Camera {
     fn default() -> Self {
         Self {
-            position: Point3::new(0.0, 0.0, 35.0),
+            position: Point3::new(0.0, 0.0, 15.0),
             yaw: cgmath::Deg(0.0).into(),
             pitch: cgmath::Deg(0.0).into(),
             velocity: Vector3::zero(),

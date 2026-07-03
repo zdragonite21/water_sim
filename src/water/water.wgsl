@@ -54,6 +54,34 @@ const GREEN: vec3<f32> = vec3<f32>(0.0, 1.0, 0.0);
 const WHITE: vec3<f32> = vec3<f32>(1.0, 1.0, 1.0);
 const BLACK: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
 
+struct ColorStop {
+    pos: f32,          // 0.0 to 1.0
+    color: vec3<f32>,
+};
+
+fn color_ramp(t_raw: f32) -> vec3<f32> {
+    let t = clamp(t_raw, 0.0, 1.0);
+
+    let stops = array<ColorStop, 4>(
+        ColorStop(0.0, vec3<f32>(0.0, 0.0, 1.0)), // blue
+        ColorStop(0.3, vec3<f32>(0.0, 1.0, 1.0)), // cyan
+        ColorStop(0.7, vec3<f32>(1.0, 1.0, 0.0)), // yellow
+        ColorStop(1.0, vec3<f32>(1.0, 0.0, 0.0)), // red
+    );
+
+    for (var i = 0u; i < 3u; i++) {
+        let a = stops[i];
+        let b = stops[i + 1u];
+
+        if (t <= b.pos) {
+            let local_t = (t - a.pos) / (b.pos - a.pos);
+            return mix(a.color, b.color, local_t);
+        }
+    }
+
+    return stops[3].color;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var center_offset: vec2<f32> = (in.uv - 0.5) * 2.0;
@@ -83,7 +111,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // );
     let mag = length(in.velocity);
     let strength = mag / 10.0;
-    let color = mix(BLUE, RED, strength);
+    let color = color_ramp(strength);
 
     return light_intensity * vec4(color, 1.0);
 }

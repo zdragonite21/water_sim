@@ -22,8 +22,8 @@ pub struct WaterScene {
 }
 
 impl WaterScene {
-    const SIM_HZ: u64 = 120;
-    const MAX_STEPS: u8 = 8;
+    const SIM_HZ: u64 = 240;
+    const MAX_STEPS: u8 = 16;
 
     pub async fn new(
         device: &wgpu::Device,
