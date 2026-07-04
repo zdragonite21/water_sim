@@ -69,18 +69,6 @@ impl Sim {
         self.particles = particles;
     }
 
-    pub fn particles(&self) -> &[Particle] {
-        &self.particles
-    }
-
-    pub fn update_config(&mut self, config: &SimConfig) {
-        if config == &self.config {
-            return;
-        }
-
-        self.config = config.clone();
-    }
-
     pub fn get_stats(&self) -> Stats {
         let particle_count = self.particles.len();
         let density_sum: f32 = self.particles.iter().map(|p| p.density).sum();
@@ -96,17 +84,29 @@ impl Sim {
         }
     }
 
-    pub fn reset(&mut self) {
-        self.create_particles();
-        self.rebuild_spatial_grid();
+    pub fn particles(&self) -> &[Particle] {
+        &self.particles
     }
 
-    pub fn current_config(&self) -> SimConfig {
-        self.config.clone()
+    pub fn smoothing_radius(&self) -> f32 {
+        self.config.smoothing_radius
+    }
+
+    pub fn update_config(&mut self, config: &SimConfig) {
+        if config == &self.config {
+            return;
+        }
+
+        self.config = config.clone();
     }
 
     pub fn bounds(&self) -> Vector3<f32> {
         self.config.size.into()
+    }
+
+    pub fn reset(&mut self) {
+        self.create_particles();
+        self.rebuild_spatial_grid();
     }
 
     pub fn update(&mut self, dt: instant::Duration) {

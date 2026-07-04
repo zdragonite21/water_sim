@@ -11,14 +11,14 @@ use serde::{Deserialize, Serialize};
 #[serde(default)]
 pub struct SceneConfig {
     pub active_pipeline: PipelineId,
-    pub pipeline_config: PipelineConfigs,
+    pub pipeline_configs: PipelineConfigs,
 }
 
 impl Default for SceneConfig {
     fn default() -> Self {
         Self {
             active_pipeline: PipelineId::default(),
-            pipeline_config: PipelineConfigs::default(),
+            pipeline_configs: PipelineConfigs::default(),
         }
     }
 }
@@ -50,7 +50,7 @@ impl Scene {
             surface_config,
             cam_bind_group_layout,
             scene_config.active_pipeline,
-            &scene_config.pipeline_config,
+            &scene_config.pipeline_configs,
         )?;
 
         Ok(Self {
@@ -118,17 +118,17 @@ impl Scene {
         surface_config: &wgpu::SurfaceConfiguration,
         cam_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> anyhow::Result<()> {
-        if self.pipeline.active_id() != self.config.active_pipeline {
+        if self.pipeline.id() != self.config.active_pipeline {
             self.pipeline = Pipeline::new(
                 device,
                 surface_config,
                 cam_bind_group_layout,
                 self.config.active_pipeline,
-                &self.config.pipeline_config,
+                &self.config.pipeline_configs,
             )?;
         } else {
             self.pipeline
-                .update_config(device, queue, &self.config.pipeline_config);
+                .update_config(device, queue, &self.config.pipeline_configs);
         }
         Ok(())
     }

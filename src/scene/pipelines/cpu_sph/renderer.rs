@@ -227,10 +227,6 @@ impl BillboardRenderer {
         );
     }
 
-    pub fn current_config(&self) -> RenderConfig {
-        self.config.clone()
-    }
-
     pub fn upload_particles(&mut self, queue: &wgpu::Queue, particles: &[Particle]) {
         // convert sim particles/cells into GPU instance data
         let instance_data = particles

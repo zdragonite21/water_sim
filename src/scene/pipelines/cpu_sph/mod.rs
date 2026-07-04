@@ -109,7 +109,7 @@ impl Pipeline {
         self.debug_overlay.rebuild_lines(
             self.sim.particles(),
             &self.sim.bounds(),
-            self.sim.current_config().smoothing_radius,
+            self.sim.smoothing_radius(),
         );
         self.debug_overlay.upload(queue, view_proj);
     }
@@ -126,14 +126,6 @@ impl Pipeline {
         self.resize_debug_overlay_capacity(device);
         self.renderer
             .update_uniforms(queue, config.sim.target_density);
-    }
-
-    pub fn current_config(&self) -> Config {
-        Config {
-            sim: self.sim.current_config(),
-            render: self.renderer.current_config(),
-            debug: self.debug_overlay.current_config(),
-        }
     }
 
     pub fn stats(&self) -> Stats {
@@ -162,7 +154,7 @@ impl Pipeline {
         let capacity = self.debug_overlay.required_capacity(
             self.sim.particles().len(),
             &bounds,
-            self.sim.current_config().smoothing_radius,
+            self.sim.smoothing_radius(),
         );
         self.debug_overlay.resize_capacity(device, capacity);
     }

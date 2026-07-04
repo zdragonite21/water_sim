@@ -85,7 +85,7 @@ impl Pipeline {
         }
     }
 
-    pub fn active_id(&self) -> PipelineId {
+    pub fn id(&self) -> PipelineId {
         match self {
             Self::CpuSph(pipeline) => pipeline.id(),
         }
@@ -98,7 +98,7 @@ impl Pipeline {
         }
 
         PipelineStats {
-            label: self.active_id().label(),
+            label: self.id().label(),
             rows,
         }
     }

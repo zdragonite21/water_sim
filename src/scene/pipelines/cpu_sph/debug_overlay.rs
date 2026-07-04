@@ -133,10 +133,6 @@ impl DebugOverlay {
         self.config = config.clone();
     }
 
-    pub fn current_config(&self) -> DebugConfig {
-        self.config.clone()
-    }
-
     fn add_bounds(&mut self, size: &Vector3<f32>) {
         const BOUND_COLOR: [f32; 4] = [1.0, 1.0, 0.0, 1.0];
         const BOUND_WIDTH: f32 = 2.0;

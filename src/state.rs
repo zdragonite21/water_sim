@@ -318,8 +318,8 @@ impl State {
         self.scene
             .render(&mut encoder, &view, &self.camera.bind_group)?;
 
-        let mut scene_config = self.scene.config_mut();
         let scene_stats = self.scene.stats();
+        let mut scene_config = self.scene.config_mut();
 
         self.gui.render(
             self.frame_clock.dt,
