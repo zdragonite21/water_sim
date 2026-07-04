@@ -11,8 +11,7 @@ debug_stats! {
     #[derive(Debug, Clone)]
     #[allow(dead_code)]
     pub struct Stats {
-        stat avg_density: f32 = 0.0;
-        stat particle_count: usize = 0;
+        particle_count: usize = 0;
     }
 }
 
@@ -295,15 +294,8 @@ impl Sim {
 impl Sim {
     pub fn get_stats(&self) -> Stats {
         let particle_count = self.particles.len();
-        let density_sum: f32 = self.particles.iter().map(|p| p.density).sum();
-        let avg_density = if particle_count > 0 {
-            density_sum / particle_count as f32
-        } else {
-            0.0
-        };
 
         Stats {
-            avg_density,
             particle_count,
         }
     }

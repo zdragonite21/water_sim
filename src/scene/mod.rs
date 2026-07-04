@@ -1,11 +1,12 @@
 pub mod debug;
 pub mod pipelines;
 
-use crate::scene::pipelines::{Pipeline, PipelineStats};
+use crate::{gui::Panel, scene::pipelines::{Pipeline, PipelineStats}};
 use cgmath::Matrix4;
 
 use crate::scene::pipelines::{PipelineConfigs, PipelineId};
 use serde::{Deserialize, Serialize};
+use crate::inspect::Inspect;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -20,6 +21,23 @@ impl Default for SceneConfig {
             active_pipeline: PipelineId::default(),
             pipeline_configs: PipelineConfigs::default(),
         }
+    }
+}
+
+impl Panel for SceneConfig {
+    fn draw(&mut self, ui: &imgui::Ui) {
+        ui.window("Water")
+            .size([280.0, 125.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                ui.text(format!(
+                    "Active Pipeline: {}",
+                    self.active_pipeline.label()
+                ));
+                ui.separator();
+
+                let _pipeline_id = ui.push_id(self.active_pipeline.as_str());
+                self.pipeline_configs.cpu_sph.inspect(ui);
+            });
     }
 }
 

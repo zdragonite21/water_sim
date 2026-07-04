@@ -1,5 +1,6 @@
+use crate::config::CameraConfig;
 use crate::debug_watch;
-use crate::{camera::Camera, scene::config::SceneConfig, inspect::Inspect, scene::SceneStats};
+use crate::{scene::SceneConfig, scene::SceneStats};
 use wgpu::{Device, Queue, TextureFormat};
 use winit::event::Event;
 use winit::window::Window;
@@ -10,8 +11,6 @@ pub struct Gui {
     renderer: imgui_wgpu::Renderer,
 
     debug_text: DebugText,
-    camera: CameraPanel,
-    water: WaterPanel,
 }
 
 impl Gui {
@@ -44,8 +43,6 @@ impl Gui {
             platform,
             renderer,
             debug_text: DebugText::new(),
-            camera: CameraPanel::new(),
-            water: WaterPanel::new(),
         }
     }
 
@@ -76,7 +73,7 @@ impl Gui {
         encoder: &mut wgpu::CommandEncoder,
         target_view: &wgpu::TextureView,
         window: &Window,
-        camera: &mut Camera,
+        camera_settings: &mut CameraConfig,
         scene_config: &mut SceneConfig,
         scene_stats: &SceneStats,
     ) -> anyhow::Result<()> {
@@ -86,8 +83,8 @@ impl Gui {
         let ui = self.context.frame();
 
         self.debug_text.draw(ui, scene_stats);
-        self.camera.draw(ui, camera);
-        self.water.draw(ui, scene_config);
+        camera_settings.draw(ui);
+        scene_config.draw(ui);
 
         self.platform.prepare_render(ui, window);
         let draw_data = self.context.render();
@@ -144,6 +141,7 @@ impl DebugText {
                 draw_text_with_bg(ui, &format!("FPS: {:.1}", ui.io().framerate));
 
                 if self.open {
+                    // debug text from scene stats
                     let mut rows = Vec::new();
 
                     rows.extend(scene_stats.pipeline.rows.iter().cloned());
@@ -154,6 +152,7 @@ impl DebugText {
                         }
                     }
 
+                    // global debug "watches"
                     let watches = debug_watch::snapshot();
                     if !watches.is_empty() {
                         let mut current_group: Option<&str> = None;
@@ -161,6 +160,7 @@ impl DebugText {
                             let (group, label) = name.split_once('.').unwrap_or(("misc", name));
 
                             if current_group != Some(group) {
+                                // section header
                                 current_group = Some(group);
                                 draw_text_with_bg(ui, &format!("[{}]", group));
                             }
@@ -203,55 +203,6 @@ fn draw_text_with_bg(ui: &imgui::Ui, text: &str) {
     ui.text(text);
 }
 
-pub struct CameraPanel {
-    pub open: bool,
-}
-
-impl CameraPanel {
-    pub fn new() -> Self {
-        Self { open: true }
-    }
-
-    pub fn draw(&mut self, ui: &imgui::Ui, camera: &mut Camera) {
-        if !self.open {
-            return;
-        }
-
-        ui.window("Camera")
-            .opened(&mut self.open)
-            .size([280.0, 145.0], imgui::Condition::FirstUseEver)
-            .build(|| {
-                camera.settings.inspect(ui);
-            });
-    }
-}
-
-pub struct WaterPanel {
-    pub open: bool,
-}
-
-impl WaterPanel {
-    pub fn new() -> Self {
-        Self { open: true }
-    }
-
-    pub fn draw(&mut self, ui: &imgui::Ui, water_config: &mut SceneConfig) {
-        if !self.open {
-            return;
-        }
-
-        ui.window("Water")
-            .opened(&mut self.open)
-            .size([280.0, 125.0], imgui::Condition::FirstUseEver)
-            .build(|| {
-                ui.text(format!(
-                    "Active Pipeline: {}",
-                    water_config.active_pipeline.label()
-                ));
-                ui.separator();
-
-                let _pipeline_id = ui.push_id(water_config.active_pipeline.as_str());
-                water_config.cpu_sph.inspect(ui);
-            });
-    }
+pub trait Panel {
+    fn draw(&mut self, ui: &imgui::Ui);
 }

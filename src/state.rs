@@ -20,7 +20,7 @@ pub struct State {
     config: wgpu::SurfaceConfiguration,
     is_surface_configured: bool,
 
-    pub camera: CameraRig,
+    pub camera_rig: CameraRig,
     scene: Scene,
     frame_clock: FrameClock,
     gui: Gui,
@@ -118,7 +118,7 @@ impl State {
             queue,
             config,
             is_surface_configured: false,
-            camera,
+            camera_rig: camera,
             scene,
             frame_clock,
             gui,
@@ -131,7 +131,7 @@ impl State {
             self.config.height = height;
             self.surface.configure(&self.device, &self.config);
 
-            self.camera.resize(width, height);
+            self.camera_rig.resize(width, height);
             self.scene.resize(&self.device, &self.queue, &self.config);
             log::debug!("surface resized to {}x{}", width, height);
 
@@ -154,7 +154,7 @@ impl State {
     }
 
     fn set_camera_capture(&mut self, captured: bool) {
-        self.camera.controller.set_captured(captured);
+        self.camera_rig.controller.set_captured(captured);
         self.window.set_cursor_visible(!captured);
 
         if captured {
@@ -165,7 +165,7 @@ impl State {
             {
                 Ok(()) => log::debug!("cursor captured"),
                 Err(err) => {
-                    self.camera.controller.set_captured(false);
+                    self.camera_rig.controller.set_captured(false);
                     self.window.set_cursor_visible(true);
                     log::warn!("failed to capture cursor: {err}");
                 }
@@ -186,11 +186,11 @@ impl State {
                         ..
                     },
                 ..
-            } => self.camera.controller.process_keyboard(*key, *state),
+            } => self.camera_rig.controller.process_keyboard(*key, *state),
             WindowEvent::MouseWheel { delta, .. }
-                if self.camera.controller.is_captured() || !self.gui_wants_mouse() =>
+                if self.camera_rig.controller.is_captured() || !self.gui_wants_mouse() =>
             {
-                self.camera.controller.handle_mouse_scroll(delta);
+                self.camera_rig.controller.handle_mouse_scroll(delta);
                 true
             }
             WindowEvent::MouseInput {
@@ -205,7 +205,7 @@ impl State {
                 state,
                 button: MouseButton::Right,
                 ..
-            } if *state == ElementState::Released && self.camera.controller.is_captured() => {
+            } if *state == ElementState::Released && self.camera_rig.controller.is_captured() => {
                 self.set_camera_capture(false);
                 true
             }
@@ -242,7 +242,7 @@ impl State {
                 true
             }
             KeyCode::KeyH => {
-                self.camera.camera.reset_view();
+                self.camera_rig.camera.reset_view();
                 true
             }
             KeyCode::KeyR => {
@@ -255,7 +255,7 @@ impl State {
             }
             KeyCode::ArrowRight => {
                 if self.scene.paused() {
-                    self.scene.step(&self.queue, &self.camera.view_proj());
+                    self.scene.step(&self.queue, &self.camera_rig.view_proj());
                 }
                 true
             }
@@ -264,8 +264,8 @@ impl State {
     }
 
     pub fn update(&mut self, dt: instant::Duration) {
-        self.camera.update(&self.queue, dt);
-        self.scene.update(&self.queue, dt, &self.camera.view_proj());
+        self.camera_rig.update(&self.queue, dt);
+        self.scene.update(&self.queue, dt, &self.camera_rig.view_proj());
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {
@@ -316,7 +316,7 @@ impl State {
             });
 
         self.scene
-            .render(&mut encoder, &view, &self.camera.bind_group)?;
+            .render(&mut encoder, &view, &self.camera_rig.bind_group)?;
 
         let scene_stats = self.scene.stats();
         let mut scene_config = self.scene.config_mut();
@@ -328,13 +328,13 @@ impl State {
             &mut encoder,
             &view,
             &self.window,
-            &mut self.camera.camera,
+            &mut self.camera_rig.camera.settings,
             &mut scene_config,
             &scene_stats,
         )?;
         
         self.scene
-            .sync_pipeline(&self.device, &self.queue, &self.config, &self.camera.bind_group_layout)?;
+            .sync_pipeline(&self.device, &self.queue, &self.config, &self.camera_rig.bind_group_layout)?;
 
         self.queue.submit([encoder.finish()]);
         output.present();
@@ -356,7 +356,7 @@ impl State {
 
     pub fn current_config(&self) -> AppConfig {
         AppConfig {
-            camera: self.camera.current_config(),
+            camera: self.camera_rig.current_config(),
             window: WindowConfig {
                 width: self.config.width,
                 height: self.config.height,

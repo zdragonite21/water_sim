@@ -1,4 +1,4 @@
-use crate::inspect::inspect_config;
+use crate::{gui::Panel, inspect::{inspect_config, Inspect}};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -52,5 +52,15 @@ inspect_config! {
         slider damping: f32 = 5.0, 0.0, 20.0;
         slider mouse_sens: f32 = 0.005, 0.001, 0.02;
         slider scroll_sens: f32 = 0.1, 0.01, 2.0;
+    }
+}
+
+impl Panel for CameraConfig {
+    fn draw(&mut self, ui: &imgui::Ui) {
+        ui.window("Camera")
+            .size([280.0, 145.0], imgui::Condition::FirstUseEver)
+            .build(|| {
+                self.inspect(ui);
+            });
     }
 }

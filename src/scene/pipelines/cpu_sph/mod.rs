@@ -41,7 +41,6 @@ pub struct Pipeline {
     sim: Sim,
     renderer: BillboardRenderer,
     debug_overlay: DebugOverlay,
-    config: Config,
 }
 
 impl Pipeline {
@@ -79,7 +78,6 @@ impl Pipeline {
             sim,
             renderer,
             debug_overlay,
-            config: config.clone(),
         })
     }
 
