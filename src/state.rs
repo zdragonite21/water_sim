@@ -8,7 +8,7 @@ use winit::{
 };
 
 use crate::{
-    camera::CameraRig, config::{AppConfig, WindowConfig}, debug_watch, water::scene::WaterScene,
+    camera::CameraRig, config::{AppConfig, WindowConfig}, debug_watch, scene::Scene,
 };
 use crate::{frame_clock::FrameClock, gui::Gui};
 
@@ -21,7 +21,7 @@ pub struct State {
     is_surface_configured: bool,
 
     pub camera: CameraRig,
-    scene: WaterScene,
+    scene: Scene,
     frame_clock: FrameClock,
     gui: Gui,
 }
@@ -98,11 +98,11 @@ impl State {
 
         let camera = CameraRig::new(&device, config.width, config.height, &app_config.camera);
 
-        let scene = WaterScene::new(
+        let scene = Scene::new(
             &device,
             &config,
             &camera.bind_group_layout,
-            &app_config.water,
+            &app_config.scene,
         )
         .await?;
         log::debug!("water scene created");
@@ -318,7 +318,7 @@ impl State {
         self.scene
             .render(&mut encoder, &view, &self.camera.bind_group)?;
 
-        let mut water_config = self.scene.current_config();
+        let mut scene_config = self.scene.config_mut();
         let scene_stats = self.scene.stats();
 
         self.gui.render(
@@ -329,12 +329,12 @@ impl State {
             &view,
             &self.window,
             &mut self.camera.camera,
-            &mut water_config,
+            &mut scene_config,
             &scene_stats,
         )?;
-
+        
         self.scene
-            .update_config(&self.device, &self.queue, &water_config);
+            .sync_pipeline(&self.device, &self.queue, &self.config, &self.camera.bind_group_layout)?;
 
         self.queue.submit([encoder.finish()]);
         output.present();
@@ -361,7 +361,7 @@ impl State {
                 width: self.config.width,
                 height: self.config.height,
             },
-            water: self.scene.current_config(),
+            scene: self.scene.current_config(),
         }
     }
 }

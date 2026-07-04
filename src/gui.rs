@@ -1,8 +1,5 @@
 use crate::debug_watch;
-use crate::{
-    camera::Camera, config::WaterConfig, inspect::Inspect, stats::DebugStats,
-    water::scene::WaterSceneStats,
-};
+use crate::{camera::Camera, scene::config::SceneConfig, inspect::Inspect, scene::SceneStats};
 use wgpu::{Device, Queue, TextureFormat};
 use winit::event::Event;
 use winit::window::Window;
@@ -80,8 +77,8 @@ impl Gui {
         target_view: &wgpu::TextureView,
         window: &Window,
         camera: &mut Camera,
-        water_config: &mut WaterConfig,
-        scene_stats: &WaterSceneStats,
+        scene_config: &mut SceneConfig,
+        scene_stats: &SceneStats,
     ) -> anyhow::Result<()> {
         self.context.io_mut().update_delta_time(dt);
         self.platform.prepare_frame(self.context.io_mut(), window)?;
@@ -90,7 +87,7 @@ impl Gui {
 
         self.debug_text.draw(ui, scene_stats);
         self.camera.draw(ui, camera);
-        self.water.draw(ui, water_config);
+        self.water.draw(ui, scene_config);
 
         self.platform.prepare_render(ui, window);
         let draw_data = self.context.render();
@@ -130,7 +127,7 @@ impl DebugText {
         self.open = !self.open;
     }
 
-    fn draw(&mut self, ui: &imgui::Ui, scene_stats: &WaterSceneStats) {
+    fn draw(&mut self, ui: &imgui::Ui, scene_stats: &SceneStats) {
         let _window_bg = ui.push_style_color(imgui::StyleColor::WindowBg, [0.0, 0.0, 0.0, 0.0]);
         let _border = ui.push_style_color(imgui::StyleColor::Border, [0.0, 0.0, 0.0, 0.0]);
         let _padding = ui.push_style_var(imgui::StyleVar::WindowPadding([0.0, 0.0]));
@@ -149,9 +146,9 @@ impl DebugText {
                 if self.open {
                     let mut rows = Vec::new();
 
-                    scene_stats.sim.append_debug_text_rows(&mut rows);
+                    rows.extend(scene_stats.pipeline.rows.iter().cloned());
                     if !rows.is_empty() {
-                        draw_text_with_bg(ui, "[Water Sim]");
+                        draw_text_with_bg(ui, &format!("[{}]", scene_stats.pipeline.label));
                         for row in &rows {
                             draw_text_with_bg(ui, row);
                         }
@@ -167,9 +164,9 @@ impl DebugText {
                                 current_group = Some(group);
                                 draw_text_with_bg(ui, &format!("[{}]", group));
                             }
-         
+
                             draw_text_with_bg(ui, &format!("{label}: {}", entry.value));
-                            
+
                             if ui.is_item_hovered() {
                                 ui.tooltip(|| {
                                     ui.text(format!(
@@ -238,7 +235,7 @@ impl WaterPanel {
         Self { open: true }
     }
 
-    pub fn draw(&mut self, ui: &imgui::Ui, water_config: &mut WaterConfig) {
+    pub fn draw(&mut self, ui: &imgui::Ui, water_config: &mut SceneConfig) {
         if !self.open {
             return;
         }
@@ -247,14 +244,14 @@ impl WaterPanel {
             .opened(&mut self.open)
             .size([280.0, 125.0], imgui::Condition::FirstUseEver)
             .build(|| {
-                ui.text("Simulation");
-                water_config.sim.inspect(ui);
+                ui.text(format!(
+                    "Active Pipeline: {}",
+                    water_config.active_pipeline.label()
+                ));
                 ui.separator();
-                ui.text("Rendering");
-                water_config.render.inspect(ui);
-                ui.separator();
-                ui.text("Debug Overlay");
-                water_config.debug.inspect(ui);
+
+                let _pipeline_id = ui.push_id(water_config.active_pipeline.as_str());
+                water_config.cpu_sph.inspect(ui);
             });
     }
 }

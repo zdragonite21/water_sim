@@ -4,14 +4,15 @@ use cgmath::{InnerSpace, Point3, Vector3};
 use rand::RngExt;
 use rand::rngs::ThreadRng;
 
-use crate::{config::WaterSimConfig, dwatch, stats::debug_stats};
+use super::config::SimConfig;
+use crate::{dwatch, stats::debug_stats};
 
 debug_stats! {
     #[derive(Debug, Clone)]
     #[allow(dead_code)]
-    pub struct WaterSimStats {
-        avg_density: f32 = 0.0;
-        particle_count: usize = 0;
+    pub struct Stats {
+        stat avg_density: f32 = 0.0;
+        stat particle_count: usize = 0;
     }
 }
 
@@ -22,17 +23,17 @@ pub struct Particle {
     pub predicted: Point3<f32>,
 }
 
-pub struct WaterSim {
+pub struct Sim {
     particles: Vec<Particle>,
     spatial_grid: SpatialGrid,
-    config: WaterSimConfig,
+    config: SimConfig,
     rng: ThreadRng,
 }
 
-impl WaterSim {
+impl Sim {
     const LOOK_AHEAD_FACTOR: f32 = 1.0 / 120.0;
 
-    pub fn new(config: &WaterSimConfig) -> Self {
+    pub fn new(config: &SimConfig) -> Self {
         Self {
             particles: Vec::new(),
             spatial_grid: SpatialGrid::new(),
@@ -72,7 +73,7 @@ impl WaterSim {
         &self.particles
     }
 
-    pub fn update_config(&mut self, config: &WaterSimConfig) {
+    pub fn update_config(&mut self, config: &SimConfig) {
         if config == &self.config {
             return;
         }
@@ -80,7 +81,7 @@ impl WaterSim {
         self.config = config.clone();
     }
 
-    pub fn get_stats(&self) -> WaterSimStats {
+    pub fn get_stats(&self) -> Stats {
         let particle_count = self.particles.len();
         let density_sum: f32 = self.particles.iter().map(|p| p.density).sum();
         let avg_density = if particle_count > 0 {
@@ -89,7 +90,7 @@ impl WaterSim {
             0.0
         };
 
-        WaterSimStats {
+        Stats {
             avg_density,
             particle_count,
         }
@@ -100,7 +101,7 @@ impl WaterSim {
         self.rebuild_spatial_grid();
     }
 
-    pub fn current_config(&self) -> WaterSimConfig {
+    pub fn current_config(&self) -> SimConfig {
         self.config.clone()
     }
 
@@ -203,7 +204,7 @@ impl WaterSim {
         }
     }
 
-    fn resolve_collisions(config: &WaterSimConfig, p: &mut Particle) {
+    fn resolve_collisions(config: &SimConfig, p: &mut Particle) {
         let half_bound_size = Vector3::from(config.size) / 2.0;
         let damping = config.damping;
 
@@ -249,7 +250,7 @@ impl WaterSim {
 
     fn calculate_pressure_force(
         grid: &SpatialGrid,
-        config: &WaterSimConfig,
+        config: &SimConfig,
         particles: &[Particle],
         particle_idx: usize,
         rng: &mut ThreadRng,
@@ -286,7 +287,7 @@ impl WaterSim {
 
     fn calculate_viscosity_force(
         grid: &SpatialGrid,
-        config: &WaterSimConfig,
+        config: &SimConfig,
         particles: &[Particle],
         particle_idx: usize,
     ) -> Vector3<f32> {
@@ -311,7 +312,7 @@ impl WaterSim {
         viscosity * config.viscosity_strength
     }
 
-    fn convert_density_to_pressure(config: &WaterSimConfig, density: f32) -> f32 {
+    fn convert_density_to_pressure(config: &SimConfig, density: f32) -> f32 {
         let density_error = density - config.target_density;
         density_error * config.pressure_multiplier
     }

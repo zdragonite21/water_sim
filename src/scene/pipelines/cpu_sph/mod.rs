@@ -1,55 +1,85 @@
 mod debug_overlay;
 mod renderer;
 mod sim;
+pub mod config;
 
-use crate::config::WaterConfig;
 use cgmath::Matrix4;
 
-pub use debug_overlay::DebugOverlay;
-pub use renderer::WaterRenderer;
-pub use sim::{Particle, WaterSim, WaterSimStats};
+use crate::scene::pipelines::PipelineId;
 
-pub struct CpuSphParticlesPipeline {
-    sim: WaterSim,
-    renderer: WaterRenderer,
-    debug_overlay: DebugOverlay,
+pub use debug_overlay::DebugOverlay;
+pub use renderer::BillboardRenderer;
+pub use sim::{Particle, Sim, Stats};
+
+use serde::{Deserialize, Serialize};
+use config::{DebugConfig, RenderConfig, SimConfig};
+use crate::inspect::Inspect;
+
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct Config {
+    pub sim: SimConfig,
+    pub render: RenderConfig,
+    pub debug: DebugConfig,
 }
 
-impl CpuSphParticlesPipeline {
+impl Inspect for Config {
+    fn inspect(&mut self, ui: &imgui::Ui) {
+        ui.text("Simulation");
+        self.sim.inspect(ui);
+        ui.separator();
+        ui.text("Rendering");
+        self.render.inspect(ui);
+        ui.separator();
+        ui.text("Debug Overlay");
+        self.debug.inspect(ui);
+    }
+}
+
+pub struct Pipeline {
+    sim: Sim,
+    renderer: BillboardRenderer,
+    debug_overlay: DebugOverlay,
+    config: Config,
+}
+
+impl Pipeline {
     pub fn new(
         device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
+        surface_config: &wgpu::SurfaceConfiguration,
         bind_group_layout: &wgpu::BindGroupLayout,
-        water_config: &WaterConfig,
+        config: &Config,
     ) -> anyhow::Result<Self> {
-        let mut sim = WaterSim::new(&water_config.sim);
+        let mut sim = Sim::new(&config.sim);
         sim.reset();
 
-        let renderer = WaterRenderer::new(
+        let renderer = BillboardRenderer::new(
             device,
-            config,
+            surface_config,
             bind_group_layout,
-            water_config.sim.num_particles as usize,
-            &water_config.render,
+            config.sim.num_particles as usize,
+            &config.render,
         )?;
 
         let debug_overlay = DebugOverlay::new(
             device,
-            config,
+            surface_config,
             bind_group_layout,
             DebugOverlay::required_capacity_for_config(
-                &water_config.debug,
+                &config.debug,
                 sim.particles().len(),
                 &sim.bounds(),
-                water_config.sim.smoothing_radius,
+                config.sim.smoothing_radius,
             ),
-            &water_config.debug,
+            &config.debug,
         )?;
 
         Ok(Self {
             sim,
             renderer,
             debug_overlay,
+            config: config.clone(),
         })
     }
 
@@ -88,7 +118,7 @@ impl CpuSphParticlesPipeline {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        config: &WaterConfig,
+        config: &Config,
     ) {
         self.sim.update_config(&config.sim);
         self.renderer.update_config(&config.render);
@@ -98,16 +128,20 @@ impl CpuSphParticlesPipeline {
             .update_uniforms(queue, config.sim.target_density);
     }
 
-    pub fn current_config(&self) -> WaterConfig {
-        WaterConfig {
+    pub fn current_config(&self) -> Config {
+        Config {
             sim: self.sim.current_config(),
             render: self.renderer.current_config(),
             debug: self.debug_overlay.current_config(),
         }
     }
 
-    pub fn stats(&self) -> WaterSimStats {
+    pub fn stats(&self) -> Stats {
         self.sim.get_stats()
+    }
+
+    pub fn id(&self) -> PipelineId {
+        PipelineId::CpuSph
     }
 
     pub fn render(

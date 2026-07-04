@@ -1,37 +1,64 @@
-use crate::{
-    config::WaterConfig,
-    water::pipelines::{WaterPipeline, cpu_sph_particles::WaterSimStats},
-};
+pub mod debug;
+pub mod pipelines;
+
+use crate::scene::pipelines::{Pipeline, PipelineStats};
 use cgmath::Matrix4;
 
-pub struct WaterSceneStats {
-    pub sim: WaterSimStats,
+use crate::scene::pipelines::{PipelineConfigs, PipelineId};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SceneConfig {
+    pub active_pipeline: PipelineId,
+    pub pipeline_config: PipelineConfigs,
 }
 
-pub struct WaterScene {
-    pipeline: WaterPipeline,
+impl Default for SceneConfig {
+    fn default() -> Self {
+        Self {
+            active_pipeline: PipelineId::default(),
+            pipeline_config: PipelineConfigs::default(),
+        }
+    }
+}
+
+pub struct SceneStats {
+    pub pipeline: PipelineStats,
+}
+
+pub struct Scene {
+    pipeline: Pipeline,
     paused: bool,
     accumulator: instant::Duration,
     fixed_dt: instant::Duration,
+    config: SceneConfig,
 }
 
-impl WaterScene {
+impl Scene {
     const SIM_HZ: u64 = 120;
     const MAX_STEPS: u8 = 8;
 
     pub async fn new(
         device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
-        bind_group_layout: &wgpu::BindGroupLayout,
-        water_config: &WaterConfig,
+        surface_config: &wgpu::SurfaceConfiguration,
+        cam_bind_group_layout: &wgpu::BindGroupLayout,
+        scene_config: &SceneConfig,
     ) -> anyhow::Result<Self> {
-        let pipeline = WaterPipeline::new(device, config, bind_group_layout, water_config)?;
+        let pipeline = Pipeline::new(
+            device,
+            surface_config,
+            cam_bind_group_layout,
+            scene_config.active_pipeline,
+            &scene_config.pipeline_config,
+        )?;
 
         Ok(Self {
             pipeline,
             paused: true,
             accumulator: instant::Duration::ZERO,
             fixed_dt: instant::Duration::from_secs_f32(1.0 / Self::SIM_HZ as f32),
+            config: scene_config.clone(),
         })
     }
 
@@ -39,9 +66,9 @@ impl WaterScene {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        config: &wgpu::SurfaceConfiguration,
+        surface_config: &wgpu::SurfaceConfiguration,
     ) {
-        self.pipeline.resize(device, queue, config);
+        self.pipeline.resize(device, queue, surface_config);
     }
 
     pub fn toggle_pause(&mut self) {
@@ -80,22 +107,39 @@ impl WaterScene {
         self.pipeline.reset(device);
     }
 
-    pub fn update_config(
+    pub fn config_mut(&mut self) -> &mut SceneConfig {
+        &mut self.config
+    }
+
+    pub fn sync_pipeline(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        config: &WaterConfig,
-    ) {
-        self.pipeline.update_config(device, queue, config);
+        surface_config: &wgpu::SurfaceConfiguration,
+        cam_bind_group_layout: &wgpu::BindGroupLayout,
+    ) -> anyhow::Result<()> {
+        if self.pipeline.active_id() != self.config.active_pipeline {
+            self.pipeline = Pipeline::new(
+                device,
+                surface_config,
+                cam_bind_group_layout,
+                self.config.active_pipeline,
+                &self.config.pipeline_config,
+            )?;
+        } else {
+            self.pipeline
+                .update_config(device, queue, &self.config.pipeline_config);
+        }
+        Ok(())
     }
 
-    pub fn current_config(&self) -> WaterConfig {
-        self.pipeline.current_config()
+    pub fn current_config(&self) -> SceneConfig {
+        self.config.clone()
     }
 
-    pub fn stats(&self) -> WaterSceneStats {
-        WaterSceneStats {
-            sim: self.pipeline.stats(),
+    pub fn stats(&self) -> SceneStats {
+        SceneStats {
+            pipeline: self.pipeline.stats(),
         }
     }
 

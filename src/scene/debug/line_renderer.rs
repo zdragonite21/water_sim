@@ -1,6 +1,6 @@
 use crate::{
     render::model::{Mesh, SimpleVertex, Vertex},
-    water::debug::line_batch::Line3d,
+    scene::debug::line::Line3d,
 };
 use cgmath::{Matrix4, Point3, Transform};
 use wgpu::util::DeviceExt;

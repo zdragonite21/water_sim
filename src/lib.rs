@@ -10,5 +10,5 @@ mod render;
 mod state;
 mod stats;
 mod util;
-mod water;
+mod scene;
 mod debug_watch;

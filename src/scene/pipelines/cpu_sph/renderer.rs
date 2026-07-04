@@ -1,11 +1,11 @@
 use crate::{
-    config::WaterRenderConfig,
     render::{
         model::{Mesh, SimpleVertex, Vertex},
         texture::Texture,
     },
-    water::pipelines::cpu_sph_particles::Particle,
 };
+
+use super::{config::RenderConfig, Particle};
 
 use wgpu::util::DeviceExt;
 
@@ -55,13 +55,13 @@ impl WaterUniform {
         }
     }
 
-    pub fn update(&mut self, config: &WaterRenderConfig, target_density: f32) {
+    pub fn update(&mut self, config: &RenderConfig, target_density: f32) {
         self.particle_size = config.particle_size;
         self.target_density = target_density;
     }
 }
 
-pub struct WaterRenderer {
+pub struct BillboardRenderer {
     render_pipeline: wgpu::RenderPipeline,
     instance_buffer: wgpu::Buffer,
     particle_display: Mesh,
@@ -71,16 +71,16 @@ pub struct WaterRenderer {
     water_uniform: WaterUniform,
     water_uniform_buffer: wgpu::Buffer,
     water_bind_group: wgpu::BindGroup,
-    config: WaterRenderConfig,
+    config: RenderConfig,
 }
 
-impl WaterRenderer {
+impl BillboardRenderer {
     pub fn new(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
         num_instances: usize,
-        render_config: &WaterRenderConfig,
+        render_config: &RenderConfig,
     ) -> anyhow::Result<Self> {
         let shader = device.create_shader_module(wgpu::include_wgsl!("water.wgsl"));
 
@@ -210,7 +210,7 @@ impl WaterRenderer {
         }
     }
 
-    pub fn update_config(&mut self, config: &WaterRenderConfig) {
+    pub fn update_config(&mut self, config: &RenderConfig) {
         if config == &self.config {
             return;
         }
@@ -227,7 +227,7 @@ impl WaterRenderer {
         );
     }
 
-    pub fn current_config(&self) -> WaterRenderConfig {
+    pub fn current_config(&self) -> RenderConfig {
         self.config.clone()
     }
 

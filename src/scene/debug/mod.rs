@@ -1,2 +1,2 @@
-pub mod line_batch;
+pub mod line;
 pub mod line_renderer;

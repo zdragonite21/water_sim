@@ -1,18 +1,18 @@
 use crate::{
-    config::DebugOverlayConfig,
     util::bounds::Bounds3,
-    water::{
-        debug::{line_batch::LineBatch, line_renderer::LineRenderer},
-        pipelines::cpu_sph_particles::Particle,
+    scene::{
+        debug::{line::LineBatch, line_renderer::LineRenderer},
+        pipelines::cpu_sph::Particle,
     },
 };
-use cgmath::{Matrix4, Point3, Vector3};
+use super::config::DebugConfig;
+use cgmath::{InnerSpace, Matrix4, Point3, Vector3};
 
 const BOUNDS_LINE_COUNT: usize = 12;
 const MAX_SPATIAL_GRID_LINES: usize = 128;
 
 pub struct DebugOverlay {
-    config: DebugOverlayConfig,
+    config: DebugConfig,
     line_batch: LineBatch,
     line_renderer: LineRenderer,
 }
@@ -23,7 +23,7 @@ impl DebugOverlay {
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
         line_capacity: usize,
-        debug_overlay_config: &DebugOverlayConfig,
+        debug_overlay_config: &DebugConfig,
     ) -> anyhow::Result<Self> {
         let line_renderer = LineRenderer::new(device, config, camera_layout, line_capacity)?;
 
@@ -56,7 +56,7 @@ impl DebugOverlay {
     }
 
     pub fn required_capacity_for_config(
-        config: &DebugOverlayConfig,
+        config: &DebugConfig,
         particle_count: usize,
         size: &Vector3<f32>,
         radius: f32,
@@ -82,7 +82,12 @@ impl DebugOverlay {
         capacity
     }
 
-    pub fn rebuild_lines(&mut self, particles: &[Particle], size: &Vector3<f32>, radius: f32) {
+    pub fn rebuild_lines(
+        &mut self,
+        particles: &[Particle],
+        size: &Vector3<f32>,
+        radius: f32,
+    ) {
         self.line_batch.clear();
 
         if !self.config.enabled {
@@ -120,7 +125,7 @@ impl DebugOverlay {
             .draw(encoder, target_view, camera_bind_group)
     }
 
-    pub fn update_config(&mut self, config: &DebugOverlayConfig) {
+    pub fn update_config(&mut self, config: &DebugConfig) {
         if config == &self.config {
             return;
         }
@@ -128,7 +133,7 @@ impl DebugOverlay {
         self.config = config.clone();
     }
 
-    pub fn current_config(&self) -> DebugOverlayConfig {
+    pub fn current_config(&self) -> DebugConfig {
         self.config.clone()
     }
 
@@ -152,7 +157,7 @@ impl DebugOverlay {
                 particle.pos,
                 particle.vel,
                 self.config.velocity_color,
-                self.config.vector_scale,
+                particle.vel.magnitude() * self.config.vector_scale,
                 self.config.vector_width,
             );
         }
