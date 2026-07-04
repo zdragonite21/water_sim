@@ -69,41 +69,6 @@ impl Sim {
         self.particles = particles;
     }
 
-    pub fn get_stats(&self) -> Stats {
-        let particle_count = self.particles.len();
-        let density_sum: f32 = self.particles.iter().map(|p| p.density).sum();
-        let avg_density = if particle_count > 0 {
-            density_sum / particle_count as f32
-        } else {
-            0.0
-        };
-
-        Stats {
-            avg_density,
-            particle_count,
-        }
-    }
-
-    pub fn particles(&self) -> &[Particle] {
-        &self.particles
-    }
-
-    pub fn smoothing_radius(&self) -> f32 {
-        self.config.smoothing_radius
-    }
-
-    pub fn update_config(&mut self, config: &SimConfig) {
-        if config == &self.config {
-            return;
-        }
-
-        self.config = config.clone();
-    }
-
-    pub fn bounds(&self) -> Vector3<f32> {
-        self.config.size.into()
-    }
-
     pub fn reset(&mut self) {
         self.create_particles();
         self.rebuild_spatial_grid();
@@ -122,7 +87,9 @@ impl Sim {
 
         self.integrate_velocities(dt);
     }
+}
 
+impl Sim {
     fn apply_gravity(&mut self, dt: f32) {
         for p in &mut self.particles {
             p.vel += -Vector3::unit_y() * self.config.gravity * dt;
@@ -322,6 +289,43 @@ impl Sim {
         let x = theta.cos();
         let y = theta.sin();
         Vector3::new(x, y, 0.0)
+    }
+}
+
+impl Sim {
+    pub fn get_stats(&self) -> Stats {
+        let particle_count = self.particles.len();
+        let density_sum: f32 = self.particles.iter().map(|p| p.density).sum();
+        let avg_density = if particle_count > 0 {
+            density_sum / particle_count as f32
+        } else {
+            0.0
+        };
+
+        Stats {
+            avg_density,
+            particle_count,
+        }
+    }
+
+    pub fn particles(&self) -> &[Particle] {
+        &self.particles
+    }
+
+    pub fn smoothing_radius(&self) -> f32 {
+        self.config.smoothing_radius
+    }
+
+    pub fn update_config(&mut self, config: &SimConfig) {
+        if config == &self.config {
+            return;
+        }
+
+        self.config = config.clone();
+    }
+
+    pub fn bounds(&self) -> Vector3<f32> {
+        self.config.size.into()
     }
 }
 
