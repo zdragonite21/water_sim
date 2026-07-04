@@ -1,7 +1,10 @@
 use crate::{
     config::DebugOverlayConfig,
     util::bounds::Bounds3,
-    water::{line_batch::LineBatch, line_renderer::LineRenderer, sim::Particle},
+    water::{
+        debug::{line_batch::LineBatch, line_renderer::LineRenderer},
+        pipelines::cpu_sph_particles::Particle,
+    },
 };
 use cgmath::{Matrix4, Point3, Vector3};
 

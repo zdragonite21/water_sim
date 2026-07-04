@@ -4,7 +4,7 @@ use crate::{
         model::{Mesh, SimpleVertex, Vertex},
         texture::Texture,
     },
-    water::sim::Particle,
+    water::pipelines::cpu_sph_particles::Particle,
 };
 
 use wgpu::util::DeviceExt;
@@ -37,7 +37,6 @@ impl InstanceRaw {
         }
     }
 }
-
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]

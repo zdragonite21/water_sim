@@ -1,10 +1,6 @@
 use crate::{
     config::WaterConfig,
-    water::{
-        debug_overlay::DebugOverlay,
-        renderer::WaterRenderer,
-        sim::{WaterSim, WaterSimStats},
-    },
+    water::pipelines::cpu_sph_particles::{DebugOverlay, WaterRenderer, WaterSim, WaterSimStats},
 };
 use cgmath::Matrix4;
 
@@ -124,7 +120,8 @@ impl WaterScene {
         self.renderer.update_config(&config.render);
         self.debug_overlay.update_config(&config.debug);
         self.resize_debug_overlay_capacity(device);
-        self.renderer.update_uniforms(queue, config.sim.target_density);
+        self.renderer
+            .update_uniforms(queue, config.sim.target_density);
     }
 
     pub fn current_config(&self) -> WaterConfig {
