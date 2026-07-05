@@ -6,11 +6,12 @@ struct Watch {
     frame: u64,
 }
 
-static WATCHES: LazyLock<Mutex<Watch>> =
-    LazyLock::new(|| Mutex::new(Watch {
+static WATCHES: LazyLock<Mutex<Watch>> = LazyLock::new(|| {
+    Mutex::new(Watch {
         map: BTreeMap::new(),
         frame: 0,
-    }));
+    })
+});
 
 #[derive(Clone)]
 pub struct WatchEntry {
@@ -20,12 +21,7 @@ pub struct WatchEntry {
     pub last_seen_frame: u64,
 }
 
-pub fn set(
-    name: &'static str,
-    value: impl Into<String>,
-    file: &'static str,
-    line: u32,
-) {
+pub fn set(name: &'static str, value: impl Into<String>, file: &'static str, line: u32) {
     let mut watch = WATCHES.lock().unwrap();
     let frame = watch.frame;
 

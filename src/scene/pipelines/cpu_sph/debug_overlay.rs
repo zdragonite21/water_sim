@@ -1,11 +1,11 @@
+use super::config::DebugConfig;
 use crate::{
-    util::bounds::Bounds3,
     scene::{
         debug::{line::LineBatch, line_renderer::LineRenderer},
         pipelines::cpu_sph::Particle,
     },
+    util::bounds::Bounds3,
 };
-use super::config::DebugConfig;
 use cgmath::{InnerSpace, Matrix4, Point3, Vector3};
 
 const BOUNDS_LINE_COUNT: usize = 12;
@@ -82,12 +82,7 @@ impl DebugOverlay {
         capacity
     }
 
-    pub fn rebuild_lines(
-        &mut self,
-        particles: &[Particle],
-        size: &Vector3<f32>,
-        radius: f32,
-    ) {
+    pub fn rebuild_lines(&mut self, particles: &[Particle], size: &Vector3<f32>, radius: f32) {
         self.line_batch.clear();
 
         if !self.config.enabled {

@@ -1,11 +1,9 @@
-use crate::{
-    render::{
-        model::{Mesh, SimpleVertex, Vertex},
-        texture::Texture,
-    },
+use crate::render::{
+    model::{Mesh, SimpleVertex, Vertex},
+    texture::Texture,
 };
 
-use super::{config::RenderConfig, Particle};
+use super::{Particle, config::RenderConfig};
 
 use wgpu::util::DeviceExt;
 

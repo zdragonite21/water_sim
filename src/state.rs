@@ -8,7 +8,10 @@ use winit::{
 };
 
 use crate::{
-    camera::CameraRig, config::{AppConfig, WindowConfig}, debug_watch, scene::Scene,
+    camera::CameraRig,
+    config::{AppConfig, WindowConfig},
+    debug_watch,
+    scene::Scene,
 };
 use crate::{frame_clock::FrameClock, gui::Gui};
 
@@ -265,7 +268,8 @@ impl State {
 
     pub fn update(&mut self, dt: instant::Duration) {
         self.camera_rig.update(&self.queue, dt);
-        self.scene.update(&self.queue, dt, &self.camera_rig.view_proj());
+        self.scene
+            .update(&self.queue, dt, &self.camera_rig.view_proj());
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {
@@ -332,9 +336,13 @@ impl State {
             &mut scene_config,
             &scene_stats,
         )?;
-        
-        self.scene
-            .sync_pipeline(&self.device, &self.queue, &self.config, &self.camera_rig.bind_group_layout)?;
+
+        self.scene.sync_pipeline(
+            &self.device,
+            &self.queue,
+            &self.config,
+            &self.camera_rig.bind_group_layout,
+        )?;
 
         self.queue.submit([encoder.finish()]);
         output.present();

@@ -1,8 +1,11 @@
-use crate::{gui::Panel, inspect::{inspect_config, Inspect}};
+use crate::scene::SceneConfig;
+use crate::{
+    gui::Panel,
+    inspect::{Inspect, inspect_config},
+};
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use crate::scene::SceneConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]

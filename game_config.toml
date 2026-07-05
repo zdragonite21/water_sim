@@ -8,7 +8,10 @@ scroll_sens = 0.10000000149011612
 width = 1600
 height = 1000
 
-[water.sim]
+[scene]
+active_pipeline = "cpu_sph"
+
+[scene.pipeline_configs.cpu_sph.sim]
 gravity = 12.0
 num_particles = 4032
 size = [
@@ -23,10 +26,10 @@ viscosity_strength = 2.0
 mass = 1.0
 damping = 0.05000000074505806
 
-[water.render]
+[scene.pipeline_configs.cpu_sph.render]
 particle_size = 0.11100000143051147
 
-[water.debug]
+[scene.pipeline_configs.cpu_sph.debug]
 enabled = true
 velocity = false
 bounds = false

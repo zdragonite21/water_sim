@@ -1,20 +1,17 @@
+pub mod config;
 mod debug_overlay;
 mod renderer;
 mod sim;
-pub mod config;
 
-use cgmath::Matrix4;
-
+use crate::inspect::Inspect;
 use crate::scene::pipelines::PipelineId;
+use cgmath::Matrix4;
+use config::{DebugConfig, RenderConfig, SimConfig};
+use serde::{Deserialize, Serialize};
 
 pub use debug_overlay::DebugOverlay;
 pub use renderer::BillboardRenderer;
 pub use sim::{Particle, Sim, Stats};
-
-use serde::{Deserialize, Serialize};
-use config::{DebugConfig, RenderConfig, SimConfig};
-use crate::inspect::Inspect;
-
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -112,12 +109,7 @@ impl Pipeline {
         self.debug_overlay.upload(queue, view_proj);
     }
 
-    pub fn update_config(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        config: &Config,
-    ) {
+    pub fn update_config(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, config: &Config) {
         self.sim.update_config(&config.sim);
         self.renderer.update_config(&config.render);
         self.debug_overlay.update_config(&config.debug);

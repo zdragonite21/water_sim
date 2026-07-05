@@ -295,9 +295,7 @@ impl Sim {
     pub fn get_stats(&self) -> Stats {
         let particle_count = self.particles.len();
 
-        Stats {
-            particle_count,
-        }
+        Stats { particle_count }
     }
 
     pub fn particles(&self) -> &[Particle] {

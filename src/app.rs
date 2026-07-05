@@ -130,9 +130,10 @@ impl ApplicationHandler<State> for App {
         };
 
         if let DeviceEvent::MouseMotion { delta } = event
-            && state.camera_rig.controller.is_captured() {
-                state.camera_rig.controller.handle_mouse(delta.0, delta.1);
-            }
+            && state.camera_rig.controller.is_captured()
+        {
+            state.camera_rig.controller.handle_mouse(delta.0, delta.1);
+        }
     }
 
     fn window_event(
