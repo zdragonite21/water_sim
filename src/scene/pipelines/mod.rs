@@ -1,7 +1,7 @@
 mod cpu_sph;
 mod gpu_sph;
 
-use crate::stats::DebugStats;
+use crate::{inspect::Inspect, stats::DebugStats};
 use cgmath::Matrix4;
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +10,15 @@ use serde::{Deserialize, Serialize};
 pub struct PipelineConfigs {
     pub cpu_sph: cpu_sph::Config,
     pub gpu_sph: gpu_sph::Config,
+}
+
+impl PipelineConfigs {
+    pub fn draw(&mut self, ui: &imgui::Ui, active_pipeline: PipelineId) {
+        match active_pipeline {
+            PipelineId::CpuSph => self.cpu_sph.inspect(ui),
+            PipelineId::GpuSph => self.gpu_sph.inspect(ui),
+        }
+    }
 }
 
 pub struct PipelineStats {

@@ -4,7 +4,6 @@ mod pipelines;
 use crate::scene::pipelines::{PipelineConfigs, PipelineId};
 use crate::{
     gui::Panel,
-    inspect::Inspect,
     scene::pipelines::{ActivePipeline, PipelineStats},
 };
 use cgmath::Matrix4;
@@ -42,7 +41,7 @@ impl Panel for SceneConfig {
                 ui.separator();
 
                 let _pipeline_id = ui.push_id(self.active_pipeline.as_str());
-                self.pipeline_configs.cpu_sph.inspect(ui);
+                self.pipeline_configs.draw(ui, self.active_pipeline);
             });
     }
 }

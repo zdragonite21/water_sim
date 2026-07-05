@@ -9,7 +9,7 @@ width = 1600
 height = 1000
 
 [scene]
-active_pipeline = "cpu_sph"
+active_pipeline = "gpu_sph"
 
 [scene.pipeline_configs.cpu_sph.sim]
 gravity = 12.0
@@ -59,7 +59,7 @@ mass = 1.0
 damping = 0.05000000074505806
 
 [scene.pipeline_configs.gpu_sph.render]
-particle_size = 0.11100000143051147
+particle_size = 0.4690000116825104
 
 [scene.pipeline_configs.gpu_sph.debug]
 enabled = true
