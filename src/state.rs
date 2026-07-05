@@ -249,7 +249,7 @@ impl State {
                 true
             }
             KeyCode::KeyR => {
-                self.scene.reset(&self.device);
+                self.reset_scene();
                 true
             }
             KeyCode::Enter => {
@@ -336,16 +336,13 @@ impl State {
         )?;
 
         // changes take effect next frame
-        let reset = self.scene.sync_pipeline(
+        if self.scene.sync_pipeline(
             &self.device,
             &self.queue,
             &self.config,
             &self.camera.bind_group_layout,
-        )?;
-
-        if reset {
-            self.frame_clock = FrameClock::new();
-            debug_watch::clear();
+        )? {
+            self.reset_scene();
         }
 
         self.queue.submit([encoder.finish()]);
@@ -375,5 +372,11 @@ impl State {
             },
             scene: self.scene.current_config(),
         }
+    }
+
+    pub fn reset_scene(&mut self) {
+        self.scene.reset(&self.device);
+        self.frame_clock = FrameClock::new();
+        debug_watch::clear();
     }
 }
