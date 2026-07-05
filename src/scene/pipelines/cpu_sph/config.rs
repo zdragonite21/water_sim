@@ -1,4 +1,4 @@
-use crate::inspect::inspect_config;
+use crate::inspect::{Inspect, inspect_config};
 use serde::{Deserialize, Serialize};
 
 inspect_config! {
@@ -36,5 +36,27 @@ inspect_config! {
         drag viscosity_strength: f32 = 0.1, 0.0, 10.0;
         drag mass: f32 = 1.0, 0.1, 10.0;
         drag damping: f32 = 0.05, 0.0, 1.0;
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct Config {
+    pub sim: SimConfig,
+    pub render: RenderConfig,
+    pub debug: DebugConfig,
+}
+
+impl Inspect for Config {
+    fn inspect(&mut self, ui: &imgui::Ui) {
+        ui.text("Simulation");
+        self.sim.inspect(ui);
+        ui.separator();
+        ui.text("Rendering");
+        self.render.inspect(ui);
+        ui.separator();
+        ui.text("Debug Overlay");
+        self.debug.inspect(ui);
     }
 }

@@ -3,36 +3,13 @@ mod debug_overlay;
 mod renderer;
 mod sim;
 
-use crate::inspect::Inspect;
 use crate::scene::pipelines::PipelineId;
 use cgmath::Matrix4;
-use config::{DebugConfig, RenderConfig, SimConfig};
-use serde::{Deserialize, Serialize};
+use debug_overlay::DebugOverlay;
+use renderer::BillboardRenderer;
+use sim::{Particle, Sim, Stats};
 
-pub use debug_overlay::DebugOverlay;
-pub use renderer::BillboardRenderer;
-pub use sim::{Particle, Sim, Stats};
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-#[serde(default)]
-pub struct Config {
-    pub sim: SimConfig,
-    pub render: RenderConfig,
-    pub debug: DebugConfig,
-}
-
-impl Inspect for Config {
-    fn inspect(&mut self, ui: &imgui::Ui) {
-        ui.text("Simulation");
-        self.sim.inspect(ui);
-        ui.separator();
-        ui.text("Rendering");
-        self.render.inspect(ui);
-        ui.separator();
-        ui.text("Debug Overlay");
-        self.debug.inspect(ui);
-    }
-}
+pub use config::Config;
 
 pub struct Pipeline {
     sim: Sim,
