@@ -80,7 +80,13 @@ impl BillboardRenderer {
         num_instances: usize,
         render_config: &RenderConfig,
     ) -> anyhow::Result<Self> {
-        let shader = device.create_shader_module(wgpu::include_wgsl!("water.wgsl"));
+        #[include_wgsl_oil::include_wgsl_oil("compute.wgsl")]
+        pub mod compute_shader{}
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("compute shader"),
+            source: wgpu::ShaderSource::Wgsl(compute_shader::SOURCE.into()),
+        });
 
         let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 

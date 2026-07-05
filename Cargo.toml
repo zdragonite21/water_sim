@@ -27,6 +27,8 @@ cgmath = "0.18"
 tobj = { version = "3.2", default-features = false, features = ["async"], optional = true }
 instant = "0.1"
 rand = "0.10"
+naga_oil = "0.2"
+include-wgsl-oil = "0.2.9"
 
 imgui = "0.12"
 imgui-winit-support = "0.13"
