@@ -336,12 +336,17 @@ impl State {
         )?;
 
         // changes take effect next frame
-        self.scene.sync_pipeline(
+        let reset = self.scene.sync_pipeline(
             &self.device,
             &self.queue,
             &self.config,
             &self.camera.bind_group_layout,
         )?;
+
+        if reset {
+            self.frame_clock = FrameClock::new();
+            debug_watch::clear();
+        }
 
         self.queue.submit([encoder.finish()]);
         output.present();
@@ -356,7 +361,7 @@ impl State {
 
     pub fn frame(&mut self) -> anyhow::Result<()> {
         self.frame_clock.tick();
-        debug_watch::begin_frame(self.frame_clock.frame_index);
+        debug_watch::begin_frame(self.frame_clock.frame_index, self.scene.paused());
         self.update(self.frame_clock.dt);
         self.render()
     }
