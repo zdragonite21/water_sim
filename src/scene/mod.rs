@@ -150,6 +150,7 @@ impl Scene {
                 self.config.active_pipeline,
                 &self.config.pipeline_configs,
             )?;
+            self.paused = true;
         } else {
             self.pipeline
                 .update_config(device, queue, &self.config.pipeline_configs);
