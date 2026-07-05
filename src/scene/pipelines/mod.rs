@@ -1,4 +1,4 @@
-pub mod cpu_sph;
+mod cpu_sph;
 
 use crate::stats::DebugStats;
 use cgmath::Matrix4;
@@ -23,11 +23,11 @@ pub struct PipelineStats {
     pub rows: Vec<String>,
 }
 
-pub enum Pipeline {
+pub enum ActivePipeline {
     CpuSph(cpu_sph::Pipeline),
 }
 
-impl Pipeline {
+impl ActivePipeline {
     pub fn new(
         device: &wgpu::Device,
         surface_config: &wgpu::SurfaceConfiguration,

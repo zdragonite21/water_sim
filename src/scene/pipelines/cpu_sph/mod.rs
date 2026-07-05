@@ -1,4 +1,4 @@
-pub mod config;
+mod config;
 mod debug_overlay;
 mod renderer;
 mod sim;

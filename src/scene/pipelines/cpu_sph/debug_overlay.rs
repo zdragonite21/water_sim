@@ -1,9 +1,6 @@
-use super::config::DebugConfig;
+use super::{Particle, config::DebugConfig};
 use crate::{
-    scene::{
-        debug::{line::LineBatch, line_renderer::LineRenderer},
-        pipelines::cpu_sph::Particle,
-    },
+    scene::debug::{line::LineBatch, line_renderer::LineRenderer},
     util::bounds::Bounds3,
 };
 use cgmath::{InnerSpace, Matrix4, Point3, Vector3};

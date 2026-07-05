@@ -17,7 +17,7 @@ use winit::platform::web::EventLoopExtWebSys;
 
 const CONFIG_FILE: &str = "game_config.toml";
 
-pub struct App {
+struct App {
     #[cfg(target_arch = "wasm32")]
     proxy: Option<winit::event_loop::EventLoopProxy<State>>,
     state: Option<State>,
@@ -31,7 +31,7 @@ impl Default for App {
 }
 
 impl App {
-    pub fn new(#[cfg(target_arch = "wasm32")] event_loop: &EventLoop<State>) -> Self {
+    fn new(#[cfg(target_arch = "wasm32")] event_loop: &EventLoop<State>) -> Self {
         #[cfg(target_arch = "wasm32")]
         let proxy = Some(event_loop.create_proxy());
 
@@ -47,7 +47,7 @@ impl App {
         }
     }
 
-    pub fn save_config(&self) {
+    fn save_config(&self) {
         if let Some(state) = &self.state {
             if let Err(err) = state.current_config().save(CONFIG_FILE) {
                 log::warn!("failed to save {CONFIG_FILE}: {err}");
@@ -130,9 +130,9 @@ impl ApplicationHandler<State> for App {
         };
 
         if let DeviceEvent::MouseMotion { delta } = event
-            && state.camera_rig.controller.is_captured()
+            && state.camera.controller.is_captured()
         {
-            state.camera_rig.controller.handle_mouse(delta.0, delta.1);
+            state.camera.controller.handle_mouse(delta.0, delta.1);
         }
     }
 

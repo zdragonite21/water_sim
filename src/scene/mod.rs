@@ -1,11 +1,11 @@
-pub mod debug;
-pub mod pipelines;
+mod debug;
+mod pipelines;
 
 use crate::scene::pipelines::{PipelineConfigs, PipelineId};
 use crate::{
     gui::Panel,
     inspect::Inspect,
-    scene::pipelines::{Pipeline, PipelineStats},
+    scene::pipelines::{ActivePipeline, PipelineStats},
 };
 use cgmath::Matrix4;
 use serde::{Deserialize, Serialize};
@@ -52,7 +52,7 @@ pub struct SceneStats {
 }
 
 pub struct Scene {
-    pipeline: Pipeline,
+    pipeline: ActivePipeline,
     paused: bool,
     accumulator: instant::Duration,
     fixed_dt: instant::Duration,
@@ -69,7 +69,7 @@ impl Scene {
         cam_bind_group_layout: &wgpu::BindGroupLayout,
         scene_config: &SceneConfig,
     ) -> anyhow::Result<Self> {
-        let pipeline = Pipeline::new(
+        let pipeline = ActivePipeline::new(
             device,
             surface_config,
             cam_bind_group_layout,
@@ -143,7 +143,7 @@ impl Scene {
         cam_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> anyhow::Result<()> {
         if self.pipeline.id() != self.config.active_pipeline {
-            self.pipeline = Pipeline::new(
+            self.pipeline = ActivePipeline::new(
                 device,
                 surface_config,
                 cam_bind_group_layout,

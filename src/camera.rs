@@ -61,10 +61,6 @@ impl Camera {
         self.orient() * Vector3::unit_x()
     }
 
-    pub fn up(&self) -> Vector3<f32> {
-        self.orient() * Vector3::unit_y()
-    }
-
     pub fn view_matrix(&self) -> Matrix4<f32> {
         Matrix4::look_to_rh(self.position, self.forward(), Vector3::unit_y())
     }
@@ -323,6 +319,10 @@ impl CameraRig {
 
     pub fn resize(&mut self, width: u32, height: u32) {
         self.projection.resize(width, height);
+    }
+
+    pub fn config_mut(&mut self) -> &mut CameraConfig {
+        &mut self.camera.settings
     }
 
     pub fn current_config(&self) -> CameraConfig {
