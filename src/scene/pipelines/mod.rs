@@ -122,6 +122,8 @@ pub enum PipelineId {
 }
 
 impl PipelineId {
+    pub const ALL: [PipelineId; 1] = [PipelineId::CpuSph];
+    
     pub fn label(self) -> &'static str {
         match self {
             Self::CpuSph => "CPU SPH",
