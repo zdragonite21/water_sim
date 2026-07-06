@@ -29,6 +29,7 @@ instant = "0.1"
 rand = "0.10"
 naga_oil = "0.2"
 include-wgsl-oil = "0.2.9"
+wgpu_sort = "0.1"
 
 imgui = "0.12"
 imgui-winit-support = "0.13"
