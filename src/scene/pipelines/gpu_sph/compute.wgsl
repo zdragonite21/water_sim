@@ -16,6 +16,7 @@ struct SimConfig {
     gravity: f32,
 
     size: vec3<f32>,
+    collision_damping: f32,
 };
 
 @group(0) @binding(0) var<storage, read> particles_prev: array<Particle>;
@@ -159,7 +160,7 @@ fn compute_density_pressure(
                 // todo handle dst = 0.0 case
                 var dir = -offset / dst;
 
-                var slope = smoothing_kernel_deriv(config.smoothing_radius, dst);
+                var slope: f32 = smoothing_kernel_deriv(config.smoothing_radius, dst);
                 
                 // todo shared pressure + neighbor density
 
@@ -173,6 +174,12 @@ fn compute_density_pressure(
     var pos = p.pos + vel * config.dt;
 
     // todo handle collisions
+    var half_bound_size = config.size / 2.0;
+    var damping = config.collision_damping;
+    var collided = abs(p.pos) > half_bound_size;
+    p.pos = select(p.pos, sign(p.pos) * half_bound_size, collided);
+    p.vel *= select(vec3(1.0), -vec3(1.0 - damping), collided);
 
+    // update global ssbo
     particles_next[index] = Particle(pos, vel, vec2<f32>(0.0, 0.0));
 }
