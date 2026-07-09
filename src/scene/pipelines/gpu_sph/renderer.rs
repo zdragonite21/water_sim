@@ -1,40 +1,11 @@
-use crate::render::{
+use crate::{render::{
     model::{Mesh, SimpleVertex, Vertex},
     texture::Texture,
-};
+}, scene::pipelines::gpu_sph::sim::ParticleRaw};
 
-use super::{Particle, config::RenderConfig};
+use super::config::RenderConfig;
 
 use wgpu::util::DeviceExt;
-
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct InstanceRaw {
-    pub pos: [f32; 3],
-    pub vel: [f32; 3],
-    pub density: f32,
-}
-
-impl InstanceRaw {
-    const ATTRIBS: [wgpu::VertexAttribute; 3] =
-        wgpu::vertex_attr_array![5 => Float32x3, 6 => Float32x3, 7 => Float32];
-
-    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &Self::ATTRIBS,
-        }
-    }
-
-    fn from_particle(p: &Particle) -> Self {
-        Self {
-            pos: p.pos.into(),
-            vel: p.vel.into(),
-            density: p.density,
-        }
-    }
-}
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -77,16 +48,11 @@ impl BillboardRenderer {
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
+        instance_buffer: &wgpu::Buffer,
         num_instances: usize,
         render_config: &RenderConfig,
     ) -> anyhow::Result<Self> {
-        #[include_wgsl_oil::include_wgsl_oil("compute.wgsl")]
-        pub mod compute_shader{}
-
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("compute shader"),
-            source: wgpu::ShaderSource::Wgsl(compute_shader::SOURCE.into()),
-        });
+        let shader = device.create_shader_module(wgpu::include_wgsl!("water.wgsl"));
 
         let depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
 
@@ -136,7 +102,7 @@ impl BillboardRenderer {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[SimpleVertex::desc(), InstanceRaw::desc()],
+                buffers: &[SimpleVertex::desc(), ParticleRaw::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -178,11 +144,9 @@ impl BillboardRenderer {
 
         let particle_display = Mesh::square(device);
 
-        let instance_buffer = Self::new_instance_buffer(device, num_instances);
-
         Ok(Self {
             render_pipeline,
-            instance_buffer,
+            instance_buffer: instance_buffer.clone(),
             particle_display,
             depth_texture,
             num_instances,
@@ -196,22 +160,6 @@ impl BillboardRenderer {
     pub fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
         self.depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
         log::debug!("depth texture rebuilt {}x{}", config.width, config.height);
-    }
-
-    pub fn new_instance_buffer(device: &wgpu::Device, num_instances: usize) -> wgpu::Buffer {
-        device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Instance Buffer"),
-            size: (std::mem::size_of::<InstanceRaw>() * num_instances) as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        })
-    }
-
-    pub fn resize_instance_buffer(&mut self, device: &wgpu::Device, num_instances: usize) {
-        if num_instances != self.num_instances {
-            self.instance_buffer = Self::new_instance_buffer(device, num_instances);
-            self.num_instances = num_instances;
-        }
     }
 
     pub fn update_config(&mut self, config: &RenderConfig) {
@@ -228,19 +176,6 @@ impl BillboardRenderer {
             &self.water_uniform_buffer,
             0,
             bytemuck::bytes_of(&self.water_uniform),
-        );
-    }
-
-    pub fn upload_particles(&mut self, queue: &wgpu::Queue, particles: &[Particle]) {
-        // convert sim particles/cells into GPU instance data
-        let instance_data = particles
-            .iter()
-            .map(InstanceRaw::from_particle)
-            .collect::<Vec<_>>();
-        queue.write_buffer(
-            &self.instance_buffer,
-            0,
-            bytemuck::cast_slice(&instance_data),
         );
     }
 

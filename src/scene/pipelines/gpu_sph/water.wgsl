@@ -11,7 +11,6 @@ struct WaterUniform {
 struct InstanceInput {
     @location(5) position: vec3<f32>,
     @location(6) velocity: vec3<f32>,
-    @location(7) density: f32,
 };
 
 @group(0) @binding(0)
@@ -28,7 +27,6 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
-    @location(1) density: f32,
     @location(2) velocity: vec3<f32>,
 };
 
@@ -43,7 +41,6 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
 
     out.clip_position = camera.proj * camera.view * pos;
     out.uv = model.uv;
-    out.density = instance.density;
     out.velocity = instance.velocity;
     return out;
 }

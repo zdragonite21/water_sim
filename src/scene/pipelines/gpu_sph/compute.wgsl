@@ -173,7 +173,7 @@ fn compute_density_pressure(
     // integrate velocity
     var pos = p.pos + vel * config.dt;
 
-    // todo handle collisions
+    // handle collisions
     var half_bound_size = config.size / 2.0;
     var damping = config.collision_damping;
     var collided = abs(p.pos) > half_bound_size;

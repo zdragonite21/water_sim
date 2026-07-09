@@ -258,7 +258,7 @@ impl State {
             }
             KeyCode::ArrowRight => {
                 if self.scene.paused() {
-                    self.scene.step(&self.queue, &self.camera.view_proj());
+                    self.scene.step(&self.device, &self.queue, &self.camera.view_proj());
                 }
                 true
             }
@@ -268,7 +268,7 @@ impl State {
 
     pub fn update(&mut self, dt: instant::Duration) {
         self.camera.update(&self.queue, dt);
-        self.scene.update(&self.queue, dt, &self.camera.view_proj());
+        self.scene.update(&self.device, &self.queue, dt, &self.camera.view_proj());
     }
 
     pub fn render(&mut self) -> anyhow::Result<()> {

@@ -102,14 +102,14 @@ impl Scene {
         self.paused
     }
 
-    pub fn update(&mut self, queue: &wgpu::Queue, dt: instant::Duration, view_proj: &Matrix4<f32>) {
+    pub fn update(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, dt: instant::Duration, view_proj: &Matrix4<f32>) {
         if !self.paused {
             self.accumulator += dt;
 
             let mut steps = 0;
 
             while self.accumulator >= self.fixed_dt && steps < Self::MAX_STEPS {
-                self.pipeline.update_fixed(self.fixed_dt);
+                self.pipeline.update_fixed(device, queue, self.fixed_dt);
                 self.accumulator -= self.fixed_dt;
                 steps += 1;
             }
@@ -121,8 +121,8 @@ impl Scene {
         self.upload_scene_data(queue, view_proj);
     }
 
-    pub fn step(&mut self, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {
-        self.pipeline.update_fixed(self.fixed_dt);
+    pub fn step(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {
+        self.pipeline.update_fixed(device, queue, self.fixed_dt);
         self.upload_scene_data(queue, view_proj);
     }
 

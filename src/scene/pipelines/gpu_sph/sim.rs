@@ -1,11 +1,8 @@
-use std::f32::consts::PI;
-
-use cgmath::{InnerSpace, Point3, Vector3};
-use rand::RngExt;
-use rand::rngs::ThreadRng;
-
 use super::config::SimConfig;
-use crate::{dwatch, stats::debug_stats};
+use crate::stats::debug_stats;
+use cgmath::{Point3, Vector3};
+
+use wgpu::util::DeviceExt;
 
 debug_stats! {
     #[derive(Debug, Clone)]
@@ -18,37 +15,331 @@ debug_stats! {
 pub struct Particle {
     pub pos: Point3<f32>,
     pub vel: Vector3<f32>,
-    pub density: f32,
-    pub predicted: Point3<f32>,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct ParticleRaw {
+    pub pos: [f32; 3],
+    pub vel: [f32; 3],
+}
+
+impl ParticleRaw {
+    const ATTRIBS: [wgpu::VertexAttribute; 2] =
+        wgpu::vertex_attr_array![5 => Float32x3, 6 => Float32x3];
+
+    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &Self::ATTRIBS,
+        }
+    }
+
+    fn from_particle(p: &Particle) -> Self {
+        Self {
+            pos: p.pos.into(),
+            vel: p.vel.into(),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct SimUniform {
+    size: [f32; 3],
+    collision_damping: f32,
+    dt: f32,
+    gravity: f32,
+    _pad: [u32; 2],
+}
+
+impl SimUniform {
+    pub fn new() -> Self {
+        Self {
+            dt: 0.0,
+            gravity: 9.81,
+            size: [1.0, 1.0, 1.0],
+            collision_damping: 0.5,
+            _pad: [0; 2],
+        }
+    }
+
+    pub fn update(&mut self, config: &SimConfig, dt: f32) {
+        self.dt = dt;
+        self.gravity = config.gravity;
+        self.size = config.size;
+        self.collision_damping = config.damping;
+    }
+}
+
+struct SimResources {
+    uniform: wgpu::Buffer,
+    particles_next: wgpu::Buffer,
+    particles_prev: wgpu::Buffer,
+}
+
+impl SimResources {
+    fn new(device: &wgpu::Device, config: &SimConfig, particles: &[Particle]) -> Self {
+        let mut sim_uniform = SimUniform::new();
+        sim_uniform.update(config, 0.0);
+
+        let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("sim uniform buffer"),
+            contents: bytemuck::bytes_of(&sim_uniform),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let particle_data = particles
+            .iter()
+            .map(ParticleRaw::from_particle)
+            .collect::<Vec<_>>();
+
+        let particle_next_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("input_buffer"),
+            contents: bytemuck::cast_slice(&particle_data),
+            usage: {
+                use wgpu::BufferUsages;
+                BufferUsages::COPY_DST | BufferUsages::COPY_SRC | BufferUsages::STORAGE | BufferUsages::VERTEX
+            },
+        });
+
+        let particle_prev_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("prev_buffer"),
+            contents: bytemuck::cast_slice(&particle_data),
+            usage: {
+                use wgpu::BufferUsages;
+                BufferUsages::COPY_DST | BufferUsages::COPY_SRC | BufferUsages::STORAGE | BufferUsages::VERTEX
+            },
+        });
+
+        Self {
+            uniform: uniform_buffer,
+            particles_next: particle_next_buffer,
+            particles_prev: particle_prev_buffer,
+        }
+    }
+
+    fn resize_particle_buffers(&mut self, device: &wgpu::Device, particles: &[Particle]) {
+        let particle_data = particles
+            .iter()
+            .map(ParticleRaw::from_particle)
+            .collect::<Vec<_>>();
+
+        self.particles_next = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("next_buffer"),
+            contents: bytemuck::cast_slice(&particle_data),
+            usage: {
+                use wgpu::BufferUsages;
+                BufferUsages::COPY_DST | BufferUsages::COPY_SRC | BufferUsages::STORAGE | BufferUsages::VERTEX
+            },
+        });
+
+        self.particles_prev = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("prev_buffer"),
+            contents: bytemuck::cast_slice(&particle_data),
+            usage: {
+                use wgpu::BufferUsages;
+                BufferUsages::COPY_DST | BufferUsages::COPY_SRC | BufferUsages::STORAGE | BufferUsages::VERTEX
+            },
+        });
+    }
+}
+
+struct SimLayouts {
+    uniform_layout: wgpu::BindGroupLayout,
+    particle_layout: wgpu::BindGroupLayout,
+}
+
+impl SimLayouts {
+    fn new(device: &wgpu::Device) -> Self {
+        let uniform_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("sim_bind_group_layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 5,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
+        let particle_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("bind_group_layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }, wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
+        Self {
+            uniform_layout,
+            particle_layout,
+        }
+    }
+}
+
+struct SimBindGroups {
+    uniform_bind_group: wgpu::BindGroup,
+    particle_bind_group_a: wgpu::BindGroup,
+    particle_bind_group_b: wgpu::BindGroup,
+}
+
+impl SimBindGroups {
+    fn new(device: &wgpu::Device, layouts: &SimLayouts, resources: &SimResources) -> Self {
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sim_bind_group"),
+            layout: &layouts.uniform_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 5,
+                resource: resources.uniform.as_entire_binding(),
+            }],
+        });
+
+        let particle_bind_group_a = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &layouts.particle_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: resources.particles_next.as_entire_binding(),
+            }, wgpu::BindGroupEntry {
+                binding: 1,
+                resource: resources.particles_prev.as_entire_binding(),
+            }],
+        });
+
+        let particle_bind_group_b = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &layouts.particle_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: resources.particles_prev.as_entire_binding(),
+            }, wgpu::BindGroupEntry {
+                binding: 1,
+                resource: resources.particles_next.as_entire_binding(),
+            }],
+        });
+
+        Self {
+            uniform_bind_group,
+            particle_bind_group_a,
+            particle_bind_group_b,
+        }
+    }
+}
+
+struct ComputePipeline {
+    pipeline: wgpu::ComputePipeline,
+    a: bool,
+}
+
+impl ComputePipeline {
+    fn new(
+        device: &wgpu::Device,
+        uniform_layout: &wgpu::BindGroupLayout,
+        particle_layout: &wgpu::BindGroupLayout,
+    ) -> Self {
+        // todo: naga oil shader composition of final compute shader
+        let shader = device.create_shader_module(wgpu::include_wgsl!("simple_compute.wgsl"));
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Sim Pipeline Layout"),
+            bind_group_layouts: &[Some(uniform_layout), Some(particle_layout)],
+            immediate_size: 0,
+        });
+
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("compute sim pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &shader,
+            entry_point: Some("main"),
+            compilation_options: Default::default(),
+            cache: Default::default(),
+        });
+
+        Self { pipeline, a: true }
+    }
+
+    fn dispatch(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        bind_groups: &SimBindGroups,
+        num_particles: usize,
+    ) {
+        let num_items_per_workgroup = 128;
+        let num_dispatches = num_particles.div_ceil(num_items_per_workgroup) as u32;
+
+        let mut pass = encoder.begin_compute_pass(&Default::default());
+        pass.set_pipeline(&self.pipeline);
+        pass.set_bind_group(0, &bind_groups.uniform_bind_group, &[]);
+        if self.a {
+            pass.set_bind_group(1, &bind_groups.particle_bind_group_a, &[]);
+        } else {
+            pass.set_bind_group(1, &bind_groups.particle_bind_group_b, &[]);
+        }
+        pass.dispatch_workgroups(num_dispatches, 1, 1);
+    }
 }
 
 pub struct Sim {
-    particles: Vec<Particle>,
-    spatial_grid: SpatialGrid,
+    compute_pipeline: ComputePipeline,
+    bind_group_layouts: SimLayouts,
+    bind_groups: SimBindGroups,
+    resources: SimResources,
+
     config: SimConfig,
-    rng: ThreadRng,
 }
 
 impl Sim {
     const LOOK_AHEAD_FACTOR: f32 = 1.0 / 120.0;
 
-    pub fn new(config: &SimConfig) -> Self {
+    pub fn new(device: &wgpu::Device, config: &SimConfig) -> Self {
+        let particles = Self::create_particles(config);
+        let resources = SimResources::new(device, config, &particles);
+        let bind_group_layouts = SimLayouts::new(device);
+        let bind_groups = SimBindGroups::new(device, &bind_group_layouts, &resources);
+
+        let compute_pipeline = ComputePipeline::new(
+            device,
+            &bind_group_layouts.uniform_layout,
+            &bind_group_layouts.particle_layout,
+        );
+
         Self {
-            particles: Vec::new(),
-            spatial_grid: SpatialGrid::new(),
+            compute_pipeline,
+            bind_group_layouts,
+            bind_groups,
+            resources,
             config: config.clone(),
-            rng: rand::rng(),
         }
     }
 
-    fn create_particles(&mut self) {
-        let n = self.config.num_particles as usize;
+    fn create_particles(config: &SimConfig) -> Vec<Particle> {
+        let n = config.num_particles as usize;
         let mut particles = Vec::with_capacity(n);
 
         let scale = 0.5;
 
-        let width = self.config.size[0] * scale;
-        let height = self.config.size[1] * scale;
+        let width = config.size[0] * scale;
+        let height = config.size[1] * scale;
 
         let num_row = (n as f32 * width / height).sqrt().floor() as usize;
         let num_col = (n as f32 * height / width).sqrt().floor() as usize;
@@ -61,402 +352,69 @@ impl Sim {
             particles.push(Particle {
                 pos,
                 vel: Vector3::new(0.0, 0.0, 0.0),
-                density: 0.0,
-                predicted: Point3::new(0.0, 0.0, 0.0),
             });
         }
-        self.particles = particles;
+        particles
+    }
+
+    pub fn resize_particle_buffers(&mut self, device: &wgpu::Device) {
+        let particles = Self::create_particles(&self.config);
+        self.resources.resize_particle_buffers(device, &particles);
     }
 
     pub fn reset(&mut self) {
-        self.create_particles();
-        self.rebuild_spatial_grid();
+        todo!();
     }
 
-    pub fn update(&mut self, dt: instant::Duration) {
+    pub fn update_uniforms(&mut self, queue: &wgpu::Queue, dt: instant::Duration) {
         let dt = dt.as_secs_f32();
 
-        self.apply_gravity(dt);
-
-        self.rebuild_spatial_grid();
-
-        self.compute_densities();
-
-        self.apply_pressure_viscosity_forces(dt);
-
-        self.integrate_velocities(dt);
-    }
-}
-
-impl Sim {
-    fn apply_gravity(&mut self, dt: f32) {
-        for p in &mut self.particles {
-            p.vel += -Vector3::unit_y() * self.config.gravity * dt;
-            p.predicted = p.pos + p.vel * Self::LOOK_AHEAD_FACTOR;
-        }
+        let mut sim_uniform = SimUniform::new();
+        sim_uniform.update(&self.config, dt);
+        queue.write_buffer(&self.resources.uniform, 0, bytemuck::bytes_of(&sim_uniform));
     }
 
-    fn rebuild_spatial_grid(&mut self) {
-        self.spatial_grid
-            .update_spatial_lookup(&self.particles, self.config.smoothing_radius);
-    }
+    pub fn dispatch(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Compute Pass"),
+            ..Default::default()
+        });
 
-    fn compute_densities(&mut self) {
-        let particle_count = self.particles.len();
-        let mut dbg_density_total = 0.0;
-        let mut dbg_neighbor_total = 0;
+        self.compute_pipeline
+            .dispatch(&mut encoder, &self.bind_groups, self.config.num_particles as usize);
 
-        for i in 0..self.particles.len() {
-            let mut density = 0.0;
-            let sample_point = self.particles[i].predicted;
-
-            dbg_neighbor_total += self.spatial_grid.for_each_neighbor(
-                &self.particles,
-                self.config.smoothing_radius,
-                sample_point,
-                |_neighbor_idx, _neighbor, _offset, dst| {
-                    let influence = Self::smoothing_kernel(self.config.smoothing_radius, dst);
-                    density += self.config.mass * influence;
-                },
-            );
-            self.particles[i].density = density;
-
-            dbg_density_total += density;
-        }
-
-        dwatch!("sim.avg_density", dbg_density_total / particle_count as f32);
-
-        let volume = self.config.size[0] * self.config.size[1] * self.config.size[2];
-        let exp_density = particle_count as f32 * self.config.mass / volume;
-        dwatch!("sim.exp_density", exp_density);
-
-        dwatch!(
-            "sim.avg_neighbor_count",
-            dbg_neighbor_total as f32 / particle_count as f32
-        );
-
-        let exp_neighbor_count =
-            PI * self.config.smoothing_radius.powi(2) * exp_density / self.config.mass;
-        dwatch!("sim.exp_neighbor_count", exp_neighbor_count);
-    }
-
-    fn apply_pressure_viscosity_forces(&mut self, dt: f32) {
-        for i in 0..self.particles.len() {
-            let pressure_force = -Self::calculate_pressure_force(
-                &self.spatial_grid,
-                &self.config,
-                &self.particles,
-                i,
-                &mut self.rng,
-            );
-            let viscosity_force = Self::calculate_viscosity_force(
-                &self.spatial_grid,
-                &self.config,
-                &self.particles,
-                i,
-            );
-            let density = self.particles[i].density.max(f32::EPSILON);
-            let pressure_accel = pressure_force / density;
-            let viscosity_accel = viscosity_force / density;
-
-            self.particles[i].vel += (pressure_accel + viscosity_accel) * dt;
-        }
-    }
-
-    fn integrate_velocities(&mut self, dt: f32) {
-        for p in &mut self.particles {
-            p.pos += p.vel * dt;
-            Self::resolve_collisions(&self.config, p);
-        }
-    }
-
-    fn resolve_collisions(config: &SimConfig, p: &mut Particle) {
-        let half_bound_size = Vector3::from(config.size) / 2.0;
-        let damping = config.damping;
-
-        if p.pos.x.abs() > half_bound_size.x {
-            p.pos.x = p.pos.x.signum() * half_bound_size.x;
-            p.vel.x *= -(1.0 - damping);
-        }
-        if p.pos.y.abs() > half_bound_size.y {
-            p.pos.y = p.pos.y.signum() * half_bound_size.y;
-            p.vel.y *= -(1.0 - damping);
-        }
-        if p.pos.z.abs() > half_bound_size.z {
-            p.pos.z = p.pos.z.signum() * half_bound_size.z;
-            p.vel.z *= -(1.0 - damping);
-        }
-    }
-
-    fn smoothing_kernel(radius: f32, dst: f32) -> f32 {
-        if dst >= radius {
-            return 0.0;
-        }
-        let volume = PI * radius.powf(4.0) / 6.0;
-        let off = radius - dst;
-        off * off / volume
-    }
-
-    fn smoothing_kernel_deriv(radius: f32, dst: f32) -> f32 {
-        if dst >= radius {
-            return 0.0;
-        }
-        let scale = 12.0 / (PI * radius.powf(4.0));
-        (dst - radius) * scale
-    }
-
-    fn viscosity_smoothing_kernel(radius: f32, dst: f32) -> f32 {
-        if dst >= radius {
-            return 0.0;
-        }
-        let volume = PI * radius.powf(8.0) / 4.0;
-        let value = (radius * radius - dst * dst).max(0.0);
-        value * value * value / volume
-    }
-
-    fn calculate_pressure_force(
-        grid: &SpatialGrid,
-        config: &SimConfig,
-        particles: &[Particle],
-        particle_idx: usize,
-        rng: &mut ThreadRng,
-    ) -> Vector3<f32> {
-        let mut density_gradient = Vector3::new(0.0, 0.0, 0.0);
-        let sample_point = particles[particle_idx].predicted;
-
-        let pressure = Self::convert_density_to_pressure(config, particles[particle_idx].density);
-
-        grid.for_each_neighbor(
-            particles,
-            config.smoothing_radius,
-            sample_point,
-            |neighbor_idx, neighbor, offset, dst| {
-                if particle_idx == neighbor_idx {
-                    return;
-                }
-
-                let dir = if dst == 0.0 {
-                    Self::random_unit_dir(rng)
-                } else {
-                    -offset / dst
-                };
-                let slope = Self::smoothing_kernel_deriv(config.smoothing_radius, dst);
-                let density = neighbor.density.max(f32::EPSILON);
-                let neighbor_pressure = Self::convert_density_to_pressure(config, density);
-                let shared_pressure = (pressure + neighbor_pressure) * 0.5;
-                density_gradient += shared_pressure * dir * slope * config.mass / density;
-            },
-        );
-
-        density_gradient
-    }
-
-    fn calculate_viscosity_force(
-        grid: &SpatialGrid,
-        config: &SimConfig,
-        particles: &[Particle],
-        particle_idx: usize,
-    ) -> Vector3<f32> {
-        let mut viscosity = Vector3::new(0.0, 0.0, 0.0);
-        let sample_point = particles[particle_idx].predicted;
-
-        grid.for_each_neighbor(
-            particles,
-            config.smoothing_radius,
-            sample_point,
-            |neighbor_idx, neighbor, _offset, dst| {
-                if particle_idx == neighbor_idx {
-                    return;
-                }
-
-                let influence = Self::viscosity_smoothing_kernel(config.smoothing_radius, dst);
-                let velocity_diff = neighbor.vel - particles[particle_idx].vel;
-                viscosity += velocity_diff * influence;
-            },
-        );
-
-        viscosity * config.viscosity_strength
-    }
-
-    fn convert_density_to_pressure(config: &SimConfig, density: f32) -> f32 {
-        let density_error = density - config.target_density;
-        density_error * config.pressure_multiplier
-    }
-
-    fn random_unit_dir(rng: &mut ThreadRng) -> Vector3<f32> {
-        let theta = rng.random_range(0.0..=2.0 * PI);
-        let x = theta.cos();
-        let y = theta.sin();
-        Vector3::new(x, y, 0.0)
+        queue.submit([encoder.finish()]);
+        self.compute_pipeline.a = !self.compute_pipeline.a;
     }
 }
 
 impl Sim {
     pub fn get_stats(&self) -> Stats {
-        let particle_count = self.particles.len();
-
-        Stats { particle_count }
-    }
-
-    pub fn particles(&self) -> &[Particle] {
-        &self.particles
+        Stats {
+            particle_count: self.config.num_particles as usize,
+        }
     }
 
     pub fn smoothing_radius(&self) -> f32 {
         self.config.smoothing_radius
     }
 
-    pub fn update_config(&mut self, config: &SimConfig) {
+    pub fn particle_buffer(&self) -> &wgpu::Buffer {
+        &self.resources.particles_next
+    }
+
+    pub fn update_config(&mut self, device: &wgpu::Device, config: &SimConfig) {
         if config == &self.config {
             return;
         }
-
+        let old_num_particles = self.config.num_particles;
         self.config = config.clone();
+        if old_num_particles != self.config.num_particles {
+            self.resize_particle_buffers(device);
+        }
     }
 
     pub fn bounds(&self) -> Vector3<f32> {
         self.config.size.into()
-    }
-}
-
-#[derive(Clone, PartialEq, PartialOrd, Ord, Eq)]
-struct GridEntry {
-    cell_key: usize,
-    particle_idx: usize,
-}
-struct SpatialGrid {
-    spatial_lookup: Vec<GridEntry>,
-    start_indices: Vec<usize>,
-}
-
-impl SpatialGrid {
-    const CELL_OFFSETS: [(i32, i32); 9] = [
-        (-1, -1),
-        (0, -1),
-        (1, -1),
-        (-1, 0),
-        (0, 0),
-        (1, 0),
-        (-1, 1),
-        (0, 1),
-        (1, 1),
-    ];
-
-    fn new() -> Self {
-        Self {
-            spatial_lookup: Vec::new(),
-            start_indices: Vec::new(),
-        }
-    }
-
-    fn update_spatial_lookup(&mut self, particles: &[Particle], radius: f32) {
-        self.spatial_lookup.resize(
-            particles.len(),
-            GridEntry {
-                cell_key: 0,
-                particle_idx: 0,
-            },
-        );
-        self.start_indices.resize(particles.len(), usize::MAX);
-
-        for i in 0..particles.len() {
-            let (cell_x, cell_y) = Self::position_to_cell(particles[i].predicted, radius);
-            let cell_key =
-                Self::get_key_from_hash(Self::hash_cell(cell_x, cell_y), particles.len());
-            self.spatial_lookup[i] = GridEntry {
-                cell_key,
-                particle_idx: i,
-            };
-            self.start_indices[i] = usize::MAX;
-        }
-
-        self.spatial_lookup.sort_by_key(|entry| entry.cell_key);
-
-        // reverse order to get the first index
-        for i in (0..particles.len()).rev() {
-            let cell_key = self.spatial_lookup[i].cell_key;
-            self.start_indices[cell_key] = i;
-        }
-    }
-
-    fn position_to_cell(pos: Point3<f32>, radius: f32) -> (i32, i32) {
-        let cell_x = (pos.x / radius).floor() as i32;
-        let cell_y = (pos.y / radius).floor() as i32;
-        (cell_x, cell_y)
-    }
-
-    fn hash_cell(cell_x: i32, cell_y: i32) -> u64 {
-        const PRIME1: u64 = 73_856_093;
-        const PRIME2: u64 = 19_349_663;
-
-        let x = cell_x as u32 as u64;
-        let y = cell_y as u32 as u64;
-
-        x.wrapping_mul(PRIME1) ^ y.wrapping_mul(PRIME2)
-    }
-
-    fn get_key_from_hash(hash: u64, length: usize) -> usize {
-        hash as usize % length
-    }
-
-    fn for_each_neighbor<F>(
-        &self,
-        particles: &[Particle],
-        radius: f32,
-        sample_point: Point3<f32>,
-        mut f: F,
-    ) -> u32
-    where
-        F: FnMut(usize, &Particle, Vector3<f32>, f32),
-    {
-        if particles.is_empty()
-            || self.spatial_lookup.len() != particles.len()
-            || self.start_indices.len() != particles.len()
-        {
-            return 0;
-        }
-
-        let (center_x, center_y) = Self::position_to_cell(sample_point, radius);
-        let sq_radius = radius * radius;
-
-        let mut num_neighbors = 0;
-
-        for (off_x, off_y) in Self::CELL_OFFSETS {
-            let curr_cell = (center_x + off_x, center_y + off_y);
-            let key =
-                Self::get_key_from_hash(Self::hash_cell(curr_cell.0, curr_cell.1), particles.len());
-
-            let cell_start_idx = self.start_indices[key];
-            if cell_start_idx == usize::MAX {
-                continue;
-            }
-
-            for i in cell_start_idx..self.spatial_lookup.len() {
-                if self.spatial_lookup[i].cell_key != key {
-                    break;
-                }
-
-                let neighbor_pos = particles[self.spatial_lookup[i].particle_idx].predicted;
-                let neighbor_cell = Self::position_to_cell(neighbor_pos, radius);
-                if neighbor_cell != curr_cell {
-                    continue;
-                }
-
-                let particle_idx = self.spatial_lookup[i].particle_idx;
-                let offset = neighbor_pos - sample_point;
-                let sq_dist = offset.magnitude2();
-                if sq_dist < sq_radius {
-                    f(
-                        particle_idx,
-                        &particles[particle_idx],
-                        offset,
-                        sq_dist.sqrt(),
-                    );
-                    num_neighbors += 1;
-                }
-            }
-        }
-
-        num_neighbors
     }
 }

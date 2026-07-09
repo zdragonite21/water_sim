@@ -74,10 +74,10 @@ impl ActivePipeline {
         }
     }
 
-    pub fn update_fixed(&mut self, dt: instant::Duration) {
+    pub fn update_fixed(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, dt: instant::Duration) {
         match self {
             Self::CpuSph(pipeline) => pipeline.update_fixed(dt),
-            Self::GpuSph(pipeline) => pipeline.update_fixed(dt),
+            Self::GpuSph(pipeline) => pipeline.update_fixed(device, queue, dt),
         }
     }
 
