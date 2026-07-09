@@ -24,13 +24,14 @@ struct SimConfig {
 fn main(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
+    // setup
     var len = arrayLength(&particles_prev);
+    var index = gid.x;
     
-    if gid.x >= len {
+    if index >= len {
         return;
     }
-    // setup
-    var index = gid.x;
+    
     var p = particles_prev[index];
 
     // apply gravity
@@ -47,5 +48,5 @@ fn main(
     // vel *= select(vec3(1.0), -vec3(1.0 - damping), collided);
 
     // update global ssbo
-    particles_next[index] = Particle(pos, vel, vec2<f32>(0.0, 0.0));
+    particles_next[index] = Particle(p.pos - 1.0, vel, vec2<f32>(0.0, 0.0));
 }

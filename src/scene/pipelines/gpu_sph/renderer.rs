@@ -157,6 +157,11 @@ impl BillboardRenderer {
         })
     }
 
+    pub fn reset(&mut self, instance_buffer: &wgpu::Buffer, num_instances: usize) {
+        self.instance_buffer = instance_buffer.clone();
+        self.num_instances = num_instances;
+    }
+
     pub fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
         self.depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
         log::debug!("depth texture rebuilt {}x{}", config.width, config.height);

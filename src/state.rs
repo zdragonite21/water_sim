@@ -1,6 +1,7 @@
 use std::default::Default;
 use std::sync::Arc;
 
+use anyhow::bail;
 use winit::{
     event::{ElementState, KeyEvent, MouseButton, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
@@ -258,7 +259,7 @@ impl State {
             }
             KeyCode::ArrowRight => {
                 if self.scene.paused() {
-                    self.scene.step(&self.device, &self.queue, &self.camera.view_proj());
+                    self.scene.step();
                 }
                 true
             }
@@ -266,17 +267,13 @@ impl State {
         }
     }
 
-    pub fn update(&mut self, dt: instant::Duration) {
-        self.camera.update(&self.queue, dt);
-        self.scene.update(&self.device, &self.queue, dt, &self.camera.view_proj());
-    }
-
-    pub fn render(&mut self) -> anyhow::Result<()> {
+    fn begin_frame(
+        &mut self,
+    ) -> anyhow::Result<(wgpu::SurfaceTexture, bool, wgpu::CommandEncoder)> {
         self.window.request_redraw();
 
         if !self.is_surface_configured {
-            log::debug!("surface not configured yet; skipping render");
-            return Ok(());
+            bail!("surface not configured yet; skipping render");
         }
 
         let (output, reconfigure_after_present) = {
@@ -286,21 +283,17 @@ impl State {
                 Success(surface_texture) => (surface_texture, false),
                 Suboptimal(surface_texture) => (surface_texture, true),
                 Timeout => {
-                    log::debug!("surface texture acquisition timed out; skipping frame");
-                    return Ok(());
+                    bail!("surface texture acquisition timed out; skipping frame");
                 }
                 Occluded => {
-                    log::debug!("surface is occluded; skipping frame");
-                    return Ok(());
+                    bail!("surface is occluded; skipping frame");
                 }
                 Validation => {
-                    log::warn!("surface texture acquisition failed validation; skipping frame");
-                    return Ok(());
+                    bail!("surface texture acquisition failed validation; skipping frame");
                 }
                 Outdated => {
-                    log::debug!("surface outdated; reconfiguring");
                     self.surface.configure(&self.device, &self.config);
-                    return Ok(());
+                    bail!("surface outdated; reconfiguring");
                 }
                 Lost => {
                     anyhow::bail!("Lost device");
@@ -308,18 +301,31 @@ impl State {
             }
         };
 
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut encoder = self
+        let encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
 
+        return Ok((output, reconfigure_after_present, encoder));
+    }
+
+    fn update(&mut self, encoder: &mut wgpu::CommandEncoder, dt: instant::Duration) {
+        self.camera.update(&self.queue, dt);
         self.scene
-            .render(&mut encoder, &view, &self.camera.bind_group)?;
+            .update(&self.queue, encoder, dt, &self.camera.view_proj());
+    }
+
+    fn render(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        output: &wgpu::SurfaceTexture,
+    ) -> anyhow::Result<()> {
+        let view = output
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        self.scene.render(encoder, &view, &self.camera.bind_group)?;
 
         let scene_stats = self.scene.stats();
 
@@ -327,7 +333,7 @@ impl State {
             self.frame_clock.dt,
             &self.device,
             &self.queue,
-            &mut encoder,
+            encoder,
             &view,
             &self.window,
             self.camera.config_mut(),
@@ -335,12 +341,23 @@ impl State {
             &scene_stats,
         )?;
 
+        Ok(())
+    }
+
+    fn end_frame(
+        &mut self,
+        encoder: wgpu::CommandEncoder,
+        output: wgpu::SurfaceTexture,
+        reconfigure_after_present: bool,
+        dt: instant::Duration,
+    ) -> anyhow::Result<()> {
         // changes take effect next frame
         if self.scene.sync_pipeline(
             &self.device,
             &self.queue,
             &self.config,
             &self.camera.bind_group_layout,
+            dt,
         )? {
             self.reset_scene();
         }
@@ -359,8 +376,16 @@ impl State {
     pub fn frame(&mut self) -> anyhow::Result<()> {
         self.frame_clock.tick();
         debug_watch::begin_frame(self.frame_clock.frame_index, self.scene.paused());
-        self.update(self.frame_clock.dt);
-        self.render()
+        let (output, reconfigure_after_present, mut encoder) = self.begin_frame()?;
+        self.update(&mut encoder, self.frame_clock.dt);
+        self.render(&mut encoder, &output)?;
+        self.end_frame(
+            encoder,
+            output,
+            reconfigure_after_present,
+            self.frame_clock.dt,
+        )?;
+        Ok(())
     }
 
     pub fn current_config(&self) -> AppConfig {

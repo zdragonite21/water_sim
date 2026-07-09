@@ -74,17 +74,18 @@ impl ActivePipeline {
         }
     }
 
-    pub fn update_fixed(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, dt: instant::Duration) {
+    pub fn update_fixed(&mut self, encoder: &mut wgpu::CommandEncoder, dt: instant::Duration) {
         match self {
             Self::CpuSph(pipeline) => pipeline.update_fixed(dt),
-            Self::GpuSph(pipeline) => pipeline.update_fixed(device, queue, dt),
+            Self::GpuSph(pipeline) => pipeline.update_fixed(encoder),
         }
     }
 
     pub fn upload_frame(&mut self, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {
         match self {
             Self::CpuSph(pipeline) => pipeline.upload_frame(queue, view_proj),
-            Self::GpuSph(pipeline) => pipeline.upload_frame(queue, view_proj),
+            // Self::GpuSph(pipeline) => pipeline.upload_frame(queue, view_proj),
+            _ => {}
         }
     }
 
@@ -93,10 +94,11 @@ impl ActivePipeline {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         config: &PipelineConfigs,
+        dt: instant::Duration,
     ) {
         match self {
             Self::CpuSph(pipeline) => pipeline.update_config(device, queue, &config.cpu_sph),
-            Self::GpuSph(pipeline) => pipeline.update_config(device, queue, &config.gpu_sph),
+            Self::GpuSph(pipeline) => pipeline.update_config(device, queue, &config.gpu_sph, dt),
         }
     }
 

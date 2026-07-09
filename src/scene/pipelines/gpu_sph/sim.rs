@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use super::config::SimConfig;
 use crate::stats::debug_stats;
 use cgmath::{Point3, Vector3};
@@ -55,21 +56,14 @@ struct SimUniform {
 }
 
 impl SimUniform {
-    pub fn new() -> Self {
+    pub fn new(size: [f32; 3], collision_damping: f32, dt: f32, gravity: f32) -> Self {
         Self {
-            dt: 0.0,
-            gravity: 9.81,
-            size: [1.0, 1.0, 1.0],
-            collision_damping: 0.5,
+            size,
+            collision_damping,
+            dt,
+            gravity,
             _pad: [0; 2],
         }
-    }
-
-    pub fn update(&mut self, config: &SimConfig, dt: f32) {
-        self.dt = dt;
-        self.gravity = config.gravity;
-        self.size = config.size;
-        self.collision_damping = config.damping;
     }
 }
 
@@ -81,8 +75,7 @@ struct SimResources {
 
 impl SimResources {
     fn new(device: &wgpu::Device, config: &SimConfig, particles: &[Particle]) -> Self {
-        let mut sim_uniform = SimUniform::new();
-        sim_uniform.update(config, 0.0);
+        let sim_uniform = SimUniform::new(config.size, config.damping, 0.0, config.gravity);
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("sim uniform buffer"),
@@ -100,7 +93,10 @@ impl SimResources {
             contents: bytemuck::cast_slice(&particle_data),
             usage: {
                 use wgpu::BufferUsages;
-                BufferUsages::COPY_DST | BufferUsages::COPY_SRC | BufferUsages::STORAGE | BufferUsages::VERTEX
+                BufferUsages::COPY_DST
+                    | BufferUsages::COPY_SRC
+                    | BufferUsages::STORAGE
+                    | BufferUsages::VERTEX
             },
         });
 
@@ -109,7 +105,10 @@ impl SimResources {
             contents: bytemuck::cast_slice(&particle_data),
             usage: {
                 use wgpu::BufferUsages;
-                BufferUsages::COPY_DST | BufferUsages::COPY_SRC | BufferUsages::STORAGE | BufferUsages::VERTEX
+                BufferUsages::COPY_DST
+                    | BufferUsages::COPY_SRC
+                    | BufferUsages::STORAGE
+                    | BufferUsages::VERTEX
             },
         });
 
@@ -118,31 +117,6 @@ impl SimResources {
             particles_next: particle_next_buffer,
             particles_prev: particle_prev_buffer,
         }
-    }
-
-    fn resize_particle_buffers(&mut self, device: &wgpu::Device, particles: &[Particle]) {
-        let particle_data = particles
-            .iter()
-            .map(ParticleRaw::from_particle)
-            .collect::<Vec<_>>();
-
-        self.particles_next = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("next_buffer"),
-            contents: bytemuck::cast_slice(&particle_data),
-            usage: {
-                use wgpu::BufferUsages;
-                BufferUsages::COPY_DST | BufferUsages::COPY_SRC | BufferUsages::STORAGE | BufferUsages::VERTEX
-            },
-        });
-
-        self.particles_prev = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("prev_buffer"),
-            contents: bytemuck::cast_slice(&particle_data),
-            usage: {
-                use wgpu::BufferUsages;
-                BufferUsages::COPY_DST | BufferUsages::COPY_SRC | BufferUsages::STORAGE | BufferUsages::VERTEX
-            },
-        });
     }
 }
 
@@ -169,25 +143,28 @@ impl SimLayouts {
 
         let particle_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("bind_group_layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }, wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
-                count: None,
-            }],
+            ],
         });
 
         Self {
@@ -217,25 +194,31 @@ impl SimBindGroups {
         let particle_bind_group_a = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &layouts.particle_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: resources.particles_next.as_entire_binding(),
-            }, wgpu::BindGroupEntry {
-                binding: 1,
-                resource: resources.particles_prev.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: resources.particles_next.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: resources.particles_prev.as_entire_binding(),
+                },
+            ],
         });
 
         let particle_bind_group_b = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &layouts.particle_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: resources.particles_prev.as_entire_binding(),
-            }, wgpu::BindGroupEntry {
-                binding: 1,
-                resource: resources.particles_next.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: resources.particles_prev.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: resources.particles_next.as_entire_binding(),
+                },
+            ],
         });
 
         Self {
@@ -284,7 +267,7 @@ impl ComputePipeline {
         bind_groups: &SimBindGroups,
         num_particles: usize,
     ) {
-        let num_items_per_workgroup = 128;
+        let num_items_per_workgroup = 64;
         let num_dispatches = num_particles.div_ceil(num_items_per_workgroup) as u32;
 
         let mut pass = encoder.begin_compute_pass(&Default::default());
@@ -359,31 +342,35 @@ impl Sim {
 
     pub fn resize_particle_buffers(&mut self, device: &wgpu::Device) {
         let particles = Self::create_particles(&self.config);
-        self.resources.resize_particle_buffers(device, &particles);
+        self.resources = SimResources::new(device, &self.config, &particles);
+        self.bind_groups = SimBindGroups::new(device, &self.bind_group_layouts, &self.resources);
     }
 
-    pub fn reset(&mut self) {
-        todo!();
+    pub fn reset(&mut self, device: &wgpu::Device) {
+        let particles = Self::create_particles(&self.config);
+        self.resources = SimResources::new(device, &self.config, &particles);
+        self.bind_groups = SimBindGroups::new(device, &self.bind_group_layouts, &self.resources);
     }
 
     pub fn update_uniforms(&mut self, queue: &wgpu::Queue, dt: instant::Duration) {
         let dt = dt.as_secs_f32();
 
-        let mut sim_uniform = SimUniform::new();
-        sim_uniform.update(&self.config, dt);
+        let sim_uniform = SimUniform::new(
+            self.config.size,
+            self.config.damping,
+            dt,
+            self.config.gravity,
+        );
         queue.write_buffer(&self.resources.uniform, 0, bytemuck::bytes_of(&sim_uniform));
     }
 
-    pub fn dispatch(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Compute Pass"),
-            ..Default::default()
-        });
+    pub fn dispatch(&mut self, encoder: &mut wgpu::CommandEncoder) {
+        self.compute_pipeline.dispatch(
+            encoder,
+            &self.bind_groups,
+            self.config.num_particles as usize,
+        );
 
-        self.compute_pipeline
-            .dispatch(&mut encoder, &self.bind_groups, self.config.num_particles as usize);
-
-        queue.submit([encoder.finish()]);
         self.compute_pipeline.a = !self.compute_pipeline.a;
     }
 }
@@ -401,6 +388,10 @@ impl Sim {
 
     pub fn particle_buffer(&self) -> &wgpu::Buffer {
         &self.resources.particles_next
+    }
+
+    pub fn num_particles(&self) -> usize {
+        self.config.num_particles as usize
     }
 
     pub fn update_config(&mut self, device: &wgpu::Device, config: &SimConfig) {
