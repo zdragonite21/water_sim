@@ -32,10 +32,8 @@ impl WaterUniform {
 
 pub struct BillboardRenderer {
     render_pipeline: wgpu::RenderPipeline,
-    instance_buffer: wgpu::Buffer,
     particle_display: Mesh,
     depth_texture: Texture,
-    num_instances: usize,
 
     water_uniform: WaterUniform,
     water_uniform_buffer: wgpu::Buffer,
@@ -48,8 +46,6 @@ impl BillboardRenderer {
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
-        instance_buffer: &wgpu::Buffer,
-        num_instances: usize,
         render_config: &RenderConfig,
     ) -> anyhow::Result<Self> {
         let shader = device.create_shader_module(wgpu::include_wgsl!("water.wgsl"));
@@ -146,20 +142,13 @@ impl BillboardRenderer {
 
         Ok(Self {
             render_pipeline,
-            instance_buffer: instance_buffer.clone(),
             particle_display,
             depth_texture,
-            num_instances,
             water_uniform,
             water_uniform_buffer,
             water_bind_group,
             config: render_config.clone(),
         })
-    }
-
-    pub fn reset(&mut self, instance_buffer: &wgpu::Buffer, num_instances: usize) {
-        self.instance_buffer = instance_buffer.clone();
-        self.num_instances = num_instances;
     }
 
     pub fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
@@ -187,6 +176,8 @@ impl BillboardRenderer {
     pub fn draw(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
+        instance_buffer: &wgpu::Buffer,
+        num_instances: usize,
         target_view: &wgpu::TextureView,
         camera_bind_group: &wgpu::BindGroup,
     ) -> anyhow::Result<()> {
@@ -218,7 +209,7 @@ impl BillboardRenderer {
             ..Default::default()
         });
 
-        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
+        render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, camera_bind_group, &[]);
         render_pass.set_bind_group(1, &self.water_bind_group, &[]);
@@ -230,7 +221,7 @@ impl BillboardRenderer {
         render_pass.draw_indexed(
             0..self.particle_display.num_elements,
             0,
-            0..self.num_instances as u32,
+            0..num_instances as u32,
         );
 
         drop(render_pass);

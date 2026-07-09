@@ -45,7 +45,7 @@ velocity_color = [
 
 [scene.pipeline_configs.gpu_sph.sim]
 gravity = 10.300000190734863
-num_particles = 5950
+num_particles = 1000
 size = [
     16.0,
     10.0,

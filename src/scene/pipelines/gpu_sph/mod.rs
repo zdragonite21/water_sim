@@ -22,14 +22,8 @@ impl Pipeline {
     ) -> anyhow::Result<Self> {
         let sim = Sim::new(device, &config.sim);
 
-        let renderer = BillboardRenderer::new(
-            device,
-            surface_config,
-            bind_group_layout,
-            sim.particle_buffer(),
-            config.sim.num_particles as usize,
-            &config.render,
-        )?;
+        let renderer =
+            BillboardRenderer::new(device, surface_config, bind_group_layout, &config.render)?;
 
         Ok(Self { sim, renderer })
     }
@@ -45,8 +39,6 @@ impl Pipeline {
 
     pub fn reset(&mut self, device: &wgpu::Device) {
         self.sim.reset(device);
-        self.renderer
-            .reset(self.sim.particle_buffer(), self.sim.num_particles());
     }
 
     pub fn update_fixed(&mut self, encoder: &mut wgpu::CommandEncoder) {
@@ -81,8 +73,13 @@ impl Pipeline {
         target_view: &wgpu::TextureView,
         camera_bind_group: &wgpu::BindGroup,
     ) -> anyhow::Result<()> {
-        self.renderer
-            .draw(encoder, target_view, camera_bind_group)?;
+        self.renderer.draw(
+            encoder,
+            self.sim.particle_buffer(),
+            self.sim.num_particles(),
+            target_view,
+            camera_bind_group,
+        )?;
         Ok(())
     }
 }

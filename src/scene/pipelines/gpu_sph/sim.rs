@@ -21,8 +21,8 @@ pub struct Particle {
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ParticleRaw {
-    pub pos: [f32; 3],
-    pub vel: [f32; 3],
+    pub pos: [f32; 4],
+    pub vel: [f32; 4],
 }
 
 impl ParticleRaw {
@@ -39,8 +39,8 @@ impl ParticleRaw {
 
     fn from_particle(p: &Particle) -> Self {
         Self {
-            pos: p.pos.into(),
-            vel: p.vel.into(),
+            pos: [p.pos.x, p.pos.y, p.pos.z, 0.0],
+            vel: [p.vel.x, p.vel.y, p.vel.z, 0.0],
         }
     }
 }
@@ -130,7 +130,7 @@ impl SimLayouts {
         let uniform_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("sim_bind_group_layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 5,
+                binding: 0,
                 visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
@@ -186,7 +186,7 @@ impl SimBindGroups {
             label: Some("sim_bind_group"),
             layout: &layouts.uniform_layout,
             entries: &[wgpu::BindGroupEntry {
-                binding: 5,
+                binding: 0,
                 resource: resources.uniform.as_entire_binding(),
             }],
         });
@@ -211,12 +211,12 @@ impl SimBindGroups {
             layout: &layouts.particle_layout,
             entries: &[
                 wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: resources.particles_prev.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
                     binding: 1,
                     resource: resources.particles_next.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: resources.particles_prev.as_entire_binding(),
                 },
             ],
         });
@@ -231,7 +231,7 @@ impl SimBindGroups {
 
 struct ComputePipeline {
     pipeline: wgpu::ComputePipeline,
-    a: bool,
+    swap: bool,
 }
 
 impl ComputePipeline {
@@ -258,11 +258,14 @@ impl ComputePipeline {
             cache: Default::default(),
         });
 
-        Self { pipeline, a: true }
+        Self {
+            pipeline,
+            swap: false,
+        }
     }
 
     fn dispatch(
-        &self,
+        &mut self,
         encoder: &mut wgpu::CommandEncoder,
         bind_groups: &SimBindGroups,
         num_particles: usize,
@@ -273,12 +276,14 @@ impl ComputePipeline {
         let mut pass = encoder.begin_compute_pass(&Default::default());
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &bind_groups.uniform_bind_group, &[]);
-        if self.a {
-            pass.set_bind_group(1, &bind_groups.particle_bind_group_a, &[]);
-        } else {
+        if self.swap {
             pass.set_bind_group(1, &bind_groups.particle_bind_group_b, &[]);
+        } else {
+            pass.set_bind_group(1, &bind_groups.particle_bind_group_a, &[]);
         }
         pass.dispatch_workgroups(num_dispatches, 1, 1);
+
+        self.swap = !self.swap;
     }
 }
 
@@ -370,8 +375,6 @@ impl Sim {
             &self.bind_groups,
             self.config.num_particles as usize,
         );
-
-        self.compute_pipeline.a = !self.compute_pipeline.a;
     }
 }
 
@@ -387,7 +390,11 @@ impl Sim {
     }
 
     pub fn particle_buffer(&self) -> &wgpu::Buffer {
-        &self.resources.particles_next
+        if self.compute_pipeline.swap {
+            &self.resources.particles_prev
+        } else {
+            &self.resources.particles_next
+        }
     }
 
     pub fn num_particles(&self) -> usize {
