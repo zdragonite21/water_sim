@@ -11,6 +11,7 @@ struct WaterUniform {
 struct InstanceInput {
     @location(5) position: vec3<f32>,
     @location(6) velocity: vec3<f32>,
+    @location(7) density: f32,
 };
 
 @group(0) @binding(0)

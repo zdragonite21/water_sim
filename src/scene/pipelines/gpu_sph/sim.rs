@@ -4,6 +4,7 @@ use crate::stats::debug_stats;
 use cgmath::{Point3, Vector3};
 
 use wgpu::util::DeviceExt;
+use wgpu_sort::{GPUSorter, SortBuffers, utils::guess_workgroup_size};
 
 debug_stats! {
     #[derive(Debug, Clone)]
@@ -16,18 +17,20 @@ debug_stats! {
 pub struct Particle {
     pub pos: Point3<f32>,
     pub vel: Vector3<f32>,
+    pub density: f32,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ParticleRaw {
     pub pos: [f32; 4],
-    pub vel: [f32; 4],
+    pub vel: [f32; 3],
+    pub density: f32,
 }
 
 impl ParticleRaw {
-    const ATTRIBS: [wgpu::VertexAttribute; 2] =
-        wgpu::vertex_attr_array![5 => Float32x3, 6 => Float32x3];
+    const ATTRIBS: [wgpu::VertexAttribute; 3] =
+        wgpu::vertex_attr_array![5 => Float32x3, 6 => Float32x3, 7 => Float32];
 
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
@@ -40,7 +43,8 @@ impl ParticleRaw {
     fn from_particle(p: &Particle) -> Self {
         Self {
             pos: [p.pos.x, p.pos.y, p.pos.z, 0.0],
-            vel: [p.vel.x, p.vel.y, p.vel.z, 0.0],
+            vel: p.vel.into(),
+            density: p.density,
         }
     }
 }
@@ -52,17 +56,25 @@ struct SimUniform {
     collision_damping: f32,
     dt: f32,
     gravity: f32,
-    _pad: [u32; 2],
+    smoothing_radius: f32,
+    _pad: u32,
 }
 
 impl SimUniform {
-    pub fn new(size: [f32; 3], collision_damping: f32, dt: f32, gravity: f32) -> Self {
+    pub fn new(
+        size: [f32; 3],
+        collision_damping: f32,
+        dt: f32,
+        gravity: f32,
+        smoothing_radius: f32,
+    ) -> Self {
         Self {
             size,
             collision_damping,
             dt,
             gravity,
-            _pad: [0; 2],
+            smoothing_radius,
+            _pad: 0,
         }
     }
 }
@@ -75,7 +87,13 @@ struct SimResources {
 
 impl SimResources {
     fn new(device: &wgpu::Device, config: &SimConfig, particles: &[Particle]) -> Self {
-        let sim_uniform = SimUniform::new(config.size, config.damping, 0.0, config.gravity);
+        let sim_uniform = SimUniform::new(
+            config.size,
+            config.damping,
+            0.0,
+            config.gravity,
+            config.smoothing_radius,
+        );
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("sim uniform buffer"),
@@ -253,7 +271,7 @@ impl ComputePipeline {
             label: Some("compute sim pipeline"),
             layout: Some(&pipeline_layout),
             module: &shader,
-            entry_point: Some("main"),
+            entry_point: Some("apply_pressure"),
             compilation_options: Default::default(),
             cache: Default::default(),
         });
@@ -286,6 +304,24 @@ impl ComputePipeline {
         self.swap = !self.swap;
     }
 }
+
+// pub struct Sorter {
+//     sorter: GPUSorter,
+//     sort_buffers: SortBuffers,
+// }
+
+// impl Sorter {
+//     async fn new(device: &wgpu::Device, queue: &wgpu::Queue, num_particles: usize) -> Self {
+//         let subgroup_size = guess_workgroup_size(device, queue).await.unwrap();
+//         let sorter = GPUSorter::new(device, subgroup_size);
+//         let sort_buffers = SortBuffers::new(device, num_particles);
+
+//         Self {
+//             sorter,
+//             sort_buffers,
+//         }
+//     }
+// }
 
 pub struct Sim {
     compute_pipeline: ComputePipeline,
@@ -340,6 +376,7 @@ impl Sim {
             particles.push(Particle {
                 pos,
                 vel: Vector3::new(0.0, 0.0, 0.0),
+                density: 0.0,
             });
         }
         particles
@@ -365,6 +402,7 @@ impl Sim {
             self.config.damping,
             dt,
             self.config.gravity,
+            self.config.smoothing_radius,
         );
         queue.write_buffer(&self.resources.uniform, 0, bytemuck::bytes_of(&sim_uniform));
     }
