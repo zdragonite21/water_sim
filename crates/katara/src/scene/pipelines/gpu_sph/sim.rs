@@ -472,6 +472,8 @@ impl SpatialGridPipeline {
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
             pass.set_pipeline(&self.start_indices);
+            pass.set_bind_group(0, uniforms, &[]);
+            pass.set_bind_group(1, particles, &[]);
             pass.set_bind_group(2, spatial_grid, &[]);
 
             pass.dispatch_workgroups(num_dispatches, 1, 1);

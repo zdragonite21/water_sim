@@ -349,19 +349,7 @@ impl State {
         encoder: wgpu::CommandEncoder,
         output: wgpu::SurfaceTexture,
         reconfigure_after_present: bool,
-        dt: instant::Duration,
     ) -> anyhow::Result<()> {
-        // changes take effect next frame
-        if self.scene.sync_pipeline(
-            &self.device,
-            &self.queue,
-            &self.config,
-            &self.camera.bind_group_layout,
-            dt,
-        )? {
-            self.reset_scene();
-        }
-
         self.queue.submit([encoder.finish()]);
         output.present();
 
@@ -376,6 +364,17 @@ impl State {
     pub fn frame(&mut self) -> anyhow::Result<()> {
         self.frame_clock.tick();
         debug_watch::begin_frame(self.frame_clock.frame_index, self.scene.paused());
+        
+        if self.scene.sync_pipeline(
+            &self.device,
+            &self.queue,
+            &self.config,
+            &self.camera.bind_group_layout,
+            self.frame_clock.dt,
+        )? {
+            self.reset_scene();
+        }
+        
         let (output, reconfigure_after_present, mut encoder) = self.begin_frame()?;
         self.update(&mut encoder, self.frame_clock.dt);
         self.render(&mut encoder, &output)?;
@@ -383,7 +382,6 @@ impl State {
             encoder,
             output,
             reconfigure_after_present,
-            self.frame_clock.dt,
         )?;
         Ok(())
     }
