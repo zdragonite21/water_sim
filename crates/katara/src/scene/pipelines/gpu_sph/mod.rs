@@ -22,8 +22,13 @@ impl Pipeline {
     ) -> anyhow::Result<Self> {
         let sim = Sim::new(device, &config.sim);
 
-        let renderer =
-            BillboardRenderer::new(device, surface_config, bind_group_layout, &config.render)?;
+        let renderer = BillboardRenderer::new(
+            device,
+            surface_config,
+            bind_group_layout,
+            &config.render,
+            sim.vel_density_buffer(),
+        )?;
 
         Ok(Self { sim, renderer })
     }
@@ -39,6 +44,7 @@ impl Pipeline {
 
     pub fn reset(&mut self, device: &wgpu::Device) {
         self.sim.reset(device);
+        self.renderer.reset(device, self.sim.vel_density_buffer());
     }
 
     pub fn update_fixed(&mut self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {

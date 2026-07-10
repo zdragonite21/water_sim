@@ -33,7 +33,6 @@ struct SimConfig {
 @group(1) @binding(1) var<storage, read_write> particles_next: array<Particle>;
 @group(1) @binding(2) var<storage, read_write> particle_vel_density: array<VelocityDensity>;
 
-
 // spatial hashing
 @group(2) @binding(0) var<storage, read_write> grid_keys: array<u32>;
 @group(2) @binding(1) var<storage, read_write> particle_indices: array<u32>;
@@ -73,25 +72,29 @@ fn fetch_particle(index: u32, fetch_velocity: bool, fetch_density: bool) -> Part
     var pos = p.pos.xyz;
 
     // compute velocity from previous position (dt is fixed), data race in main pass
+    // select still computes -> data race
     var vel: vec3<f32>;
     var density: f32;
     if !fetch_velocity {
         var p_old = particles_next[index];
         vel = (pos - p_old.pos.xyz) / config.dt;
-        density = select(
-            0.0,
-            particle_vel_density[index].density,
-            fetch_density
-        );
+        
+        if fetch_density {
+            density = particle_vel_density[index].density;
+        } else {
+            density = 0.0;
+        }
+        
         vel = apply_gravity(vel);
     } else {
         var vel_density = particle_vel_density[index];
         vel = vel_density.vel;
-        density = select(
-            0.0,
-            vel_density.density,
-            fetch_density
-        );
+        
+        if fetch_density {
+            density = vel_density.density;
+        } else {
+            density = 0.0;
+        }
     }
     // apply gravity to get predicted
     var predicted = pos + vel * config.dt;
@@ -298,7 +301,7 @@ fn main(
             var offset = other.predicted - p.predicted;
             var sq_dst = dot(offset, offset);
             if sq_dst < sq_radius {
-                if j == index {
+                if other_idx == index {
                     continue;
                 }
                 var dst = sqrt(sq_dst);
@@ -311,7 +314,7 @@ fn main(
                 var other_pressure = density_to_pressure(other.density);
                 var shared_pressure = (pressure + other_pressure) / 2.0;
 
-                pressure_force += shared_pressure * dir * slope * config.mass / max(p.density, EPSILON);
+                pressure_force += shared_pressure * dir * slope * config.mass / max(other.density, EPSILON);
             }
         }
     }
@@ -324,11 +327,11 @@ fn main(
     p.pos += p.vel * config.dt;
 
     // handle collisions
-    var half_bound_size = config.size / 2.0;
-    var damping = config.collision_damping;
-    var collided = abs(p.pos) > half_bound_size;
-    p.pos = select(p.pos, sign(p.pos) * half_bound_size, collided);
-    p.vel *= select(vec3(1.0), -vec3(1.0 - damping), collided);
+    // var half_bound_size = config.size / 2.0;
+    // var damping = config.collision_damping;
+    // var collided = abs(p.pos) > half_bound_size;
+    // p.pos = select(p.pos, sign(p.pos) * half_bound_size, collided);
+    // p.vel *= select(vec3(1.0), -vec3(1.0 - damping), collided);
 
     // store ssbo
     store_particle(index, p);

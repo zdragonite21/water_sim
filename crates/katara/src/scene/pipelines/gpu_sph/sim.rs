@@ -23,8 +23,7 @@ pub struct ParticleRaw {
 }
 
 impl ParticleRaw {
-    const ATTRIBS: [wgpu::VertexAttribute; 1] =
-        wgpu::vertex_attr_array![5 => Float32x4];
+    const ATTRIBS: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![5 => Float32x4];
 
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
@@ -101,12 +100,14 @@ impl SimResources {
             },
         });
 
-        let particle_vel_density_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("particle_vel_density_buffer"),
-            size: (4 * std::mem::size_of::<f32>() * particles.len()) as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::STORAGE,
-            mapped_at_creation: false,
-        });
+        // clear buffer
+        let vel_density = vec![0.0f32; particles.len() * 4];
+        let particle_vel_density_buffer =
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("particle_vel_density_buffer"),
+                contents: bytemuck::cast_slice(&vel_density),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
 
         let start_indices_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("start_indices_buffer"),
@@ -471,7 +472,11 @@ impl SpatialGridPipeline {
         sorter.sort(encoder, queue);
 
         {
-            encoder.clear_buffer(start_indices, 0, Some(num_particles as u64));
+            encoder.clear_buffer(
+                start_indices,
+                0,
+                Some((num_particles * std::mem::size_of::<u32>()) as u64),
+            );
         }
 
         {
@@ -621,11 +626,17 @@ impl Sim {
     }
 
     pub fn dispatch(&mut self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {
+        let particles = if self.sph_pipeline.swap {
+            &self.bind_groups.particle_bind_group_b
+        } else {
+            &self.bind_groups.particle_bind_group_a
+        };
+
         self.spatial_grid_pipeline.dispatch(
             encoder,
             queue,
             &self.bind_groups.uniform_bind_group,
-            &self.bind_groups.particle_bind_group_a,
+            particles,
             &self.bind_groups.spatial_upload_bind_group,
             &self.resources.start_indices,
             &self.sorter,
@@ -635,11 +646,7 @@ impl Sim {
         self.sph_pipeline.dispatch(
             encoder,
             &self.bind_groups.uniform_bind_group,
-            if self.sph_pipeline.swap {
-                &self.bind_groups.particle_bind_group_b
-            } else {
-                &self.bind_groups.particle_bind_group_a
-            },
+            particles,
             &self.bind_groups.spatial_upload_bind_group,
             self.config.num_particles as usize,
         );
@@ -663,6 +670,10 @@ impl Sim {
         } else {
             &self.resources.particles_next
         }
+    }
+
+    pub fn vel_density_buffer(&self) -> &wgpu::Buffer {
+        &self.resources.particle_vel_density
     }
 
     pub fn num_particles(&self) -> usize {

@@ -1,7 +1,10 @@
-use crate::{render::{
-    model::{Mesh, SimpleVertex, Vertex},
-    texture::Texture,
-}, scene::pipelines::gpu_sph::sim::ParticleRaw};
+use crate::{
+    render::{
+        model::{Mesh, SimpleVertex, Vertex},
+        texture::Texture,
+    },
+    scene::pipelines::gpu_sph::sim::ParticleRaw,
+};
 
 use super::config::RenderConfig;
 
@@ -38,6 +41,7 @@ pub struct BillboardRenderer {
     water_uniform: WaterUniform,
     water_uniform_buffer: wgpu::Buffer,
     water_bind_group: wgpu::BindGroup,
+    sim_bind_group: wgpu::BindGroup,
     config: RenderConfig,
 }
 
@@ -47,6 +51,7 @@ impl BillboardRenderer {
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
         render_config: &RenderConfig,
+        vel_density_buffer: &wgpu::Buffer,
     ) -> anyhow::Result<Self> {
         let shader = device.create_shader_module(wgpu::include_wgsl!("water.wgsl"));
 
@@ -85,10 +90,38 @@ impl BillboardRenderer {
             }],
         });
 
+        let sim_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("sim_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
+        let sim_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sim_bind_group"),
+            layout: &sim_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: vel_density_buffer.as_entire_binding(),
+            }],
+        });
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[Some(camera_layout), Some(&water_bind_group_layout)],
+                bind_group_layouts: &[
+                    Some(camera_layout),
+                    Some(&water_bind_group_layout),
+                    Some(&sim_bind_group_layout),
+                ],
                 immediate_size: 0,
             });
 
@@ -147,6 +180,7 @@ impl BillboardRenderer {
             water_uniform,
             water_uniform_buffer,
             water_bind_group,
+            sim_bind_group,
             config: render_config.clone(),
         })
     }
@@ -154,6 +188,33 @@ impl BillboardRenderer {
     pub fn resize(&mut self, device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) {
         self.depth_texture = Texture::create_depth_texture(device, config, "depth_texture");
         log::debug!("depth texture rebuilt {}x{}", config.width, config.height);
+    }
+
+    pub fn reset(&mut self, device: &wgpu::Device, vel_density_buffer: &wgpu::Buffer) {
+        let sim_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("sim_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
+        let sim_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("sim_bind_group"),
+            layout: &sim_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: vel_density_buffer.as_entire_binding(),
+            }],
+        });
+        self.sim_bind_group = sim_bind_group;
     }
 
     pub fn update_config(&mut self, config: &RenderConfig) {
@@ -213,6 +274,7 @@ impl BillboardRenderer {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, camera_bind_group, &[]);
         render_pass.set_bind_group(1, &self.water_bind_group, &[]);
+        render_pass.set_bind_group(2, &self.sim_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.particle_display.vertex_buffer.slice(..));
         render_pass.set_index_buffer(
             self.particle_display.index_buffer.slice(..),

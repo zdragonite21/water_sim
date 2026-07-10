@@ -157,8 +157,8 @@ impl Sim {
             );
             let density = self.particles[i].density.max(f32::EPSILON);
             let pressure_accel = pressure_force / density;
-            let viscosity_accel = viscosity_force / density;
-
+            // todo: add back viscosity accel
+            let viscosity_accel = viscosity_force / density * 0.0;
             self.particles[i].vel += (pressure_accel + viscosity_accel) * dt;
         }
     }
@@ -166,7 +166,7 @@ impl Sim {
     fn integrate_velocities(&mut self, dt: f32) {
         for p in &mut self.particles {
             p.pos += p.vel * dt;
-            Self::resolve_collisions(&self.config, p);
+            // Self::resolve_collisions(&self.config, p);
         }
     }
 

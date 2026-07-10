@@ -26,11 +26,18 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
-    // @location(2) velocity: vec3<f32>,
+    @location(2) velocity: vec3<f32>,
+    @location(3) density: f32,
 };
 
+struct VelocityDensity {
+    vel: vec3<f32>,
+    density: f32,
+}
+@group(2) @binding(0) var<storage, read> particle_vel_density: array<VelocityDensity>;
+
 @vertex
-fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
+fn vs_main(@builtin(instance_index) idx: u32, model: VertexInput, instance: InstanceInput) -> VertexOutput {
     var out: VertexOutput;
     var view_orient: mat4x4<f32> = camera.view;
     view_orient[3] = vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -40,7 +47,11 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
 
     out.clip_position = camera.proj * camera.view * pos;
     out.uv = model.uv;
-    // out.velocity = instance.velocity;
+
+    var vel_density = particle_vel_density[idx];
+    out.velocity = vel_density.vel;
+    out.density = vel_density.density;
+
     return out;
 }
 
@@ -69,7 +80,7 @@ fn color_ramp(t_raw: f32) -> vec3<f32> {
         let a = stops[i];
         let b = stops[i + 1u];
 
-        if (t <= b.pos) {
+        if t <= b.pos {
             let local_t = (t - a.pos) / (b.pos - a.pos);
             return mix(a.color, b.color, local_t);
         }
@@ -95,21 +106,19 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var light_intensity: f32 = max(dot(nor, light_dir), 0.1);
 
     // target density
-    // let denom = max(abs(water_config.target_density), 0.0001);
-    // let error = clamp((water_config.target_density - in.density) / denom, -1.0, 1.0);
+    let denom = max(abs(water_config.target_density), 0.0001);
+    let error = clamp((water_config.target_density - in.density) / denom, -1.0, 1.0);
 
-    // let strength = pow(abs(error), 0.5);
+    let strength = pow(abs(error), 0.5);
 
-    // let color = select(
-    //     mix(vec3(1.0), RED, strength),
-    //     mix(vec3(1.0), BLUE, strength),
-    //     error >= 0.0
-    // );
+    let color = select(
+        mix(vec3(1.0), RED, strength),
+        mix(vec3(1.0), BLUE, strength),
+        error >= 0.0
+    );
     // let mag = length(in.velocity);
     // let strength = mag / 10.0;
     // let color = color_ramp(strength);
-
-    let color = vec3<f32>(0.0, 0.5, 1.0);
 
     return light_intensity * vec4(color, 1.0);
 }
