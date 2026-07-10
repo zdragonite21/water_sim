@@ -541,6 +541,7 @@ pub struct Sim {
     sorter: Sorter,
 
     config: SimConfig,
+    num_particles: usize,
 }
 
 impl Sim {
@@ -579,6 +580,7 @@ impl Sim {
             resources,
             sorter,
             config: config.clone(),
+            num_particles: config.num_particles as usize,
         }
     }
 
@@ -606,21 +608,12 @@ impl Sim {
         particles
     }
 
-    pub fn resize_particle_buffers(&mut self, device: &wgpu::Device) {
-        let particles = Self::create_particles(&self.config);
-        self.resources = SimResources::new(device, &self.config, &particles);
-        self.bind_groups = SimBindGroups::new(
-            device,
-            &self.bind_group_layouts,
-            &self.resources,
-            &self.sorter,
-        );
-    }
-
     pub fn reset(&mut self, device: &wgpu::Device) {
         let particles = Self::create_particles(&self.config);
+        self.num_particles = self.config.num_particles as usize;
+        
         self.resources = SimResources::new(device, &self.config, &particles);
-        self.sorter = Sorter::new(device, self.config.num_particles as usize);
+        self.sorter = Sorter::new(device, self.num_particles);
         self.bind_groups = SimBindGroups::new(
             device,
             &self.bind_group_layouts,
@@ -651,7 +644,7 @@ impl Sim {
             &self.bind_groups.spatial_upload_bind_group,
             &self.resources.start_indices,
             &self.sorter,
-            self.config.num_particles as usize,
+            self.num_particles,
         );
 
         self.sph_pipeline.dispatch(
@@ -659,7 +652,7 @@ impl Sim {
             &self.bind_groups.uniform_bind_group,
             particles,
             &self.bind_groups.spatial_upload_bind_group,
-            self.config.num_particles as usize,
+            self.num_particles,
         );
     }
 }
@@ -667,7 +660,7 @@ impl Sim {
 impl Sim {
     pub fn get_stats(&self) -> Stats {
         Stats {
-            particle_count: self.config.num_particles as usize,
+            particle_count: self.num_particles,
         }
     }
 
@@ -688,18 +681,14 @@ impl Sim {
     }
 
     pub fn num_particles(&self) -> usize {
-        self.config.num_particles as usize
+        self.num_particles
     }
 
-    pub fn update_config(&mut self, device: &wgpu::Device, config: &SimConfig) {
+    pub fn update_config(&mut self, config: &SimConfig) {
         if config == &self.config {
             return;
         }
-        let old_num_particles = self.config.num_particles;
         self.config = config.clone();
-        if old_num_particles != self.config.num_particles {
-            self.resize_particle_buffers(device);
-        }
     }
 
     pub fn bounds(&self) -> Vector3<f32> {

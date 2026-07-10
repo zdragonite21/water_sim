@@ -103,7 +103,7 @@ impl ActivePipeline {
     ) {
         match self {
             Self::CpuSph(pipeline) => pipeline.update_config(device, queue, &config.cpu_sph),
-            Self::GpuSph(pipeline) => pipeline.update_config(device, queue, &config.gpu_sph, fixed_dt),
+            Self::GpuSph(pipeline) => pipeline.update_config(queue, &config.gpu_sph, fixed_dt),
         }
     }
 

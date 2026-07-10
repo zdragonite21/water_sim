@@ -53,12 +53,11 @@ impl Pipeline {
 
     pub fn update_config(
         &mut self,
-        device: &wgpu::Device,
         queue: &wgpu::Queue,
         config: &Config,
         fixed_dt: instant::Duration,
     ) {
-        self.sim.update_config(device, &config.sim);
+        self.sim.update_config(&config.sim);
         self.sim.update_uniforms(queue, fixed_dt);
         self.renderer.update_config(&config.render);
         self.renderer
