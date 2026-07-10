@@ -320,7 +320,8 @@ impl SimBindGroups {
 
 struct SphPipeline {
     compute_density: wgpu::ComputePipeline,
-    main: wgpu::ComputePipeline,
+    pressure_viscosity: wgpu::ComputePipeline,
+    collisions: wgpu::ComputePipeline,
     swap: bool,
 }
 
@@ -353,18 +354,28 @@ impl SphPipeline {
             cache: Default::default(),
         });
 
-        let main = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("main sim pipeline"),
+        let pressure_viscosity = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("pressure viscosity pipeline"),
             layout: Some(&pipeline_layout),
             module: &shader,
-            entry_point: Some("main"),
+            entry_point: Some("pressure_viscosity"),
+            compilation_options: Default::default(),
+            cache: Default::default(),
+        });
+
+        let collisions = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("collision pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &shader,
+            entry_point: Some("handle_collisions"),
             compilation_options: Default::default(),
             cache: Default::default(),
         });
 
         Self {
             compute_density,
-            main,
+            pressure_viscosity,
+            collisions,
             swap: false,
         }
     }
@@ -389,7 +400,10 @@ impl SphPipeline {
             pass.set_pipeline(&self.compute_density);
             pass.dispatch_workgroups(num_dispatches, 1, 1);
 
-            pass.set_pipeline(&self.main);
+            pass.set_pipeline(&self.pressure_viscosity);
+            pass.dispatch_workgroups(num_dispatches, 1, 1);
+
+            pass.set_pipeline(&self.collisions);
             pass.dispatch_workgroups(num_dispatches, 1, 1);
         }
 
@@ -472,11 +486,7 @@ impl SpatialGridPipeline {
         sorter.sort(encoder, queue);
 
         {
-            encoder.clear_buffer(
-                start_indices,
-                0,
-                Some((num_particles * std::mem::size_of::<u32>()) as u64),
-            );
+            encoder.clear_buffer(start_indices, 0, None);
         }
 
         {
@@ -610,6 +620,7 @@ impl Sim {
     pub fn reset(&mut self, device: &wgpu::Device) {
         let particles = Self::create_particles(&self.config);
         self.resources = SimResources::new(device, &self.config, &particles);
+        self.sorter = Sorter::new(device, self.config.num_particles as usize);
         self.bind_groups = SimBindGroups::new(
             device,
             &self.bind_group_layouts,

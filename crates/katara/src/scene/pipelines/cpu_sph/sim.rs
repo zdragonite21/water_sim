@@ -166,7 +166,7 @@ impl Sim {
     fn integrate_velocities(&mut self, dt: f32) {
         for p in &mut self.particles {
             p.pos += p.vel * dt;
-            // Self::resolve_collisions(&self.config, p);
+            Self::resolve_collisions(&self.config, p);
         }
     }
 

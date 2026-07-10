@@ -56,10 +56,10 @@ impl Pipeline {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         config: &Config,
-        dt: instant::Duration,
+        fixed_dt: instant::Duration,
     ) {
         self.sim.update_config(device, &config.sim);
-        self.sim.update_uniforms(queue, dt);
+        self.sim.update_uniforms(queue, fixed_dt);
         self.renderer.update_config(&config.render);
         self.renderer
             .update_uniforms(queue, config.sim.target_density);

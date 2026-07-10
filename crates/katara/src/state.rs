@@ -364,25 +364,20 @@ impl State {
     pub fn frame(&mut self) -> anyhow::Result<()> {
         self.frame_clock.tick();
         debug_watch::begin_frame(self.frame_clock.frame_index, self.scene.paused());
-        
+
         if self.scene.sync_pipeline(
             &self.device,
             &self.queue,
             &self.config,
             &self.camera.bind_group_layout,
-            self.frame_clock.dt,
         )? {
             self.reset_scene();
         }
-        
+
         let (output, reconfigure_after_present, mut encoder) = self.begin_frame()?;
         self.update(&mut encoder, self.frame_clock.dt);
         self.render(&mut encoder, &output)?;
-        self.end_frame(
-            encoder,
-            output,
-            reconfigure_after_present,
-        )?;
+        self.end_frame(encoder, output, reconfigure_after_present)?;
         Ok(())
     }
 

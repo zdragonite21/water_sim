@@ -99,11 +99,11 @@ impl ActivePipeline {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         config: &PipelineConfigs,
-        dt: instant::Duration,
+        fixed_dt: instant::Duration,
     ) {
         match self {
             Self::CpuSph(pipeline) => pipeline.update_config(device, queue, &config.cpu_sph),
-            Self::GpuSph(pipeline) => pipeline.update_config(device, queue, &config.gpu_sph, dt),
+            Self::GpuSph(pipeline) => pipeline.update_config(device, queue, &config.gpu_sph, fixed_dt),
         }
     }
 

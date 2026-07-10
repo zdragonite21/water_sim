@@ -60,6 +60,11 @@ fn get_key(cell: vec3<i32>, length: u32) -> u32 {
 }
 
 fn get_start_idx(key: u32) -> u32 {
+    // let encoded_start = start_indices[key];
+    // if encoded_start == 0u {
+    //     continue;
+    // }
+    // let cell_start_idx = encoded_start - 1u;    
     return start_indices[key] - 1;
 }
 
@@ -67,37 +72,23 @@ fn apply_gravity(vel: vec3<f32>) -> vec3<f32> {
     return vel + -vec3<f32>(0.0, 1.0, 0.0) * config.gravity * config.dt;
 }
 
-fn fetch_particle(index: u32, fetch_velocity: bool, fetch_density: bool) -> ParticleData {
+fn fetch_particle(index: u32, fetch_density: bool) -> ParticleData {
     var p = particles_prev[index];
     var pos = p.pos.xyz;
 
-    // compute velocity from previous position (dt is fixed), data race in main pass
     // select still computes -> data race
-    var vel: vec3<f32>;
-    var density: f32;
-    if !fetch_velocity {
-        var p_old = particles_next[index];
-        vel = (pos - p_old.pos.xyz) / config.dt;
-        
-        if fetch_density {
-            density = particle_vel_density[index].density;
-        } else {
-            density = 0.0;
-        }
-        
-        vel = apply_gravity(vel);
-    } else {
-        var vel_density = particle_vel_density[index];
-        vel = vel_density.vel;
-        
-        if fetch_density {
-            density = vel_density.density;
-        } else {
-            density = 0.0;
-        }
+    var vel_density = particle_vel_density[index];
+    
+    var vel = vel_density.vel;
+    vel = apply_gravity(vel);
+
+    var density = 0.0;
+    if fetch_density {
+        density = particle_vel_density[index].density;
     }
+    
     // apply gravity to get predicted
-    var predicted = pos + vel * config.dt;
+    var predicted = pos + vel * LOOK_AHEAD_FACTOR;
 
     return ParticleData(pos, vel, predicted, density);
 }
@@ -129,14 +120,15 @@ fn density_to_pressure(density: f32) -> f32 {
 }
 
 const CELL_OFFSETS: array<vec2<i32>, 9> = array(
-    vec2(-1, -1), vec2( 0, -1), vec2( 1, -1),
-    vec2(-1,  0), vec2( 0,  0), vec2( 1,  0),
-    vec2(-1,  1), vec2( 0,  1), vec2( 1,  1),
+    vec2(-1, -1), vec2(0, -1), vec2(1, -1),
+    vec2(-1, 0), vec2(0, 0), vec2(1, 0),
+    vec2(-1, 1), vec2(0, 1), vec2(1, 1),
 );
 
 const PI: f32 = 3.14159265359;
 const MAX_U32: u32 = 0xffffffffu;
 const EPSILON: f32 = 0.0001;
+const LOOK_AHEAD_FACTOR: f32 = 1.0 / 120.0;
 
 @compute
 @workgroup_size(64)
@@ -146,12 +138,12 @@ fn upload_keys(
     // setup
     var len = arrayLength(&particles_prev);
     var index = gid.x;
-    
+
     if index >= len {
         return;
     }
-    
-    var p = fetch_particle(index, false, false);
+
+    var p = fetch_particle(index, false);
 
     // compute spatial hash
     var cell = position_to_cell(p.predicted);
@@ -170,7 +162,7 @@ fn upload_start_indices(
     // setup
     var len = arrayLength(&particles_prev);
     var index = gid.x;
-    
+
     if index >= len {
         return;
     }
@@ -194,12 +186,12 @@ fn compute_density(
     // setup
     var len = arrayLength(&particles_prev);
     var index = gid.x;
-    
+
     if index >= len {
         return;
     }
 
-    var p = fetch_particle(index, false,false);
+    var p = fetch_particle(index, false);
 
     // compute density
     var cell = position_to_cell(p.predicted);
@@ -218,11 +210,11 @@ fn compute_density(
             if grid_keys[j] != key {
                 break;
             }
-            
+
             var other_idx = particle_indices[j];
-            var other = fetch_particle(other_idx, false, false);
+            var other = fetch_particle(other_idx, false);
             var other_cell = position_to_cell(other.predicted);
-            if (any(other_cell != curr_cell)) {
+            if any(other_cell != curr_cell) {
                 continue;
             }
 
@@ -236,18 +228,6 @@ fn compute_density(
         }
     }
 
-    // for (var i = 0u; i < len; i++) {
-    //     var other = fetch_particle(i, false);
-    //     var offset = other.predicted - p.predicted;
-    //     var sq_dst = dot(offset, offset);
-    //     if sq_dst < sq_radius {
-    //         var dst = sqrt(sq_dst);
-    //         var influence = smoothing_kernel(config.smoothing_radius, dst);
-    //         p.density += config.mass * influence;
-    //     }
-    // }
-
-    particle_vel_density[index].vel = p.vel;
     particle_vel_density[index].density = p.density;
 }
 
@@ -255,21 +235,18 @@ fn compute_density(
 
 @compute
 @workgroup_size(64)
-fn main(
+fn pressure_viscosity(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
     // setup
     var len = arrayLength(&particles_prev);
     var index = gid.x;
-    
+
     if index >= len {
         return;
     }
 
-    var p = fetch_particle(index, true, true);
-    // todo: it's possible that some threads write to memory before other threads read for copmuting velocity
-    // solve this by dipatching per cell, not per particle
-    // workgroupBarrier();
+    var p = fetch_particle(index, true);
 
     // compute pressure force
     var cell = position_to_cell(p.predicted);
@@ -290,11 +267,11 @@ fn main(
             if grid_keys[j] != key {
                 break;
             }
-            
+
             var other_idx = particle_indices[j];
-            var other = fetch_particle(other_idx, true, true);
+            var other = fetch_particle(other_idx, true);
             var other_cell = position_to_cell(other.predicted);
-            if (any(other_cell != curr_cell)) {
+            if any(other_cell != curr_cell) {
                 continue;
             }
 
@@ -308,8 +285,18 @@ fn main(
                 var slope: f32 = smoothing_kernel_deriv(config.smoothing_radius, dst);
 
                 // handle dst = 0.0 case (move in random non degeneerate dir)
-                var dir = select(offset / dst, vec3<f32>(1.0, 0.0, 0.0), dst == 0.0);
-                
+                var dir: vec3<f32>;
+                if dst == 0.0 {
+                    // opposite dirs
+                    dir = select(
+                        vec3<f32>(-1.0, 0.0, 0.0),
+                        vec3<f32>(1.0, 0.0, 0.0),
+                        index < other_idx,
+                    );
+                } else {
+                    dir = offset / dst;
+                }
+
                 // shared pressure + neighbor density
                 var other_pressure = density_to_pressure(other.density);
                 var shared_pressure = (pressure + other_pressure) / 2.0;
@@ -326,13 +313,45 @@ fn main(
     // integrate velocity
     p.pos += p.vel * config.dt;
 
-    // handle collisions
-    // var half_bound_size = config.size / 2.0;
-    // var damping = config.collision_damping;
-    // var collided = abs(p.pos) > half_bound_size;
-    // p.pos = select(p.pos, sign(p.pos) * half_bound_size, collided);
-    // p.vel *= select(vec3(1.0), -vec3(1.0 - damping), collided);
-
     // store ssbo
     store_particle(index, p);
+}
+
+fn fetch_particle_collision(index: u32) -> ParticleData {
+    var p = particles_next[index];
+    var pos = p.pos.xyz;
+
+    // compute velocity from previous position (dt is fixed), data race in main pass
+    // select still computes -> data race
+    var p_prev = particles_prev[index];
+    // todo? handle config.dt == 0.0?
+    var vel = (pos - p_prev.pos.xyz) / config.dt;
+
+    return ParticleData(pos, vel, vec3(0.0), 0.0);
+}
+
+@compute
+@workgroup_size(64)
+fn handle_collisions(
+    @builtin(global_invocation_id) gid: vec3<u32>
+) {
+    // setup
+    var len = arrayLength(&particles_prev);
+    var index = gid.x;
+
+    if index >= len {
+        return;
+    }
+
+    var p = fetch_particle_collision(index);
+
+    // handle collisions
+    var half_bound_size = config.size / 2.0;
+    var damping = config.collision_damping;
+    var collided = abs(p.pos) > half_bound_size;
+    p.pos = select(p.pos, sign(p.pos) * half_bound_size, collided);
+    p.vel *= select(vec3(1.0), -vec3(1.0 - damping), collided);
+
+    particles_next[index].pos = vec4<f32>(p.pos, 1.0);
+    particle_vel_density[index].vel = p.vel;
 }

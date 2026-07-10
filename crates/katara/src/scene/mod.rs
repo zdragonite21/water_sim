@@ -152,7 +152,6 @@ impl Scene {
         queue: &wgpu::Queue,
         surface_config: &wgpu::SurfaceConfiguration,
         cam_bind_group_layout: &wgpu::BindGroupLayout,
-        dt: instant::Duration,
     ) -> anyhow::Result<bool> {
         if self.pipeline.id() != self.config.active_pipeline {
             self.pipeline = ActivePipeline::new(
@@ -166,7 +165,7 @@ impl Scene {
             Ok(true)
         } else {
             self.pipeline
-                .update_config(device, queue, &self.config.pipeline_configs, dt);
+                .update_config(device, queue, &self.config.pipeline_configs, self.fixed_dt);
             Ok(false)
         }
     }
