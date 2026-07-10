@@ -216,7 +216,7 @@ fn compute_density(
 
 @compute
 @workgroup_size(64)
-fn compute_pressure(
+fn main(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
     // setup
@@ -228,6 +228,10 @@ fn compute_pressure(
     }
 
     var p = fetch_particle(index, true);
+
+    // todo: it's possible that some threads write to memory before other threads read for copmuting velocity
+    // solve this by dipatching per cell, not per particle
+    workgroupBarrier();
 
     // compute pressure force
     var cell = position_to_cell(p.predicted);

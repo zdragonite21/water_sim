@@ -6,7 +6,7 @@ use crate::stats::debug_stats;
 use cgmath::{Point3, Vector3};
 
 use wgpu::util::DeviceExt;
-use wgpu_sort::{GPUSorter, SortBuffers, utils::guess_workgroup_size};
+use wgpu_sort::{GPUSorter, SortBuffers};
 
 debug_stats! {
     #[derive(Debug, Clone)]
@@ -16,18 +16,10 @@ debug_stats! {
     }
 }
 
-pub struct Particle {
-    pub pos: Point3<f32>,
-    pub vel: Vector3<f32>,
-    pub density: f32,
-}
-
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ParticleRaw {
     pub pos: [f32; 4],
-    pub vel: [f32; 3],
-    pub density: f32,
 }
 
 impl ParticleRaw {
@@ -41,14 +33,6 @@ impl ParticleRaw {
             attributes: &Self::ATTRIBS,
         }
     }
-
-    fn from_particle(p: &Particle) -> Self {
-        Self {
-            pos: [p.pos.x, p.pos.y, p.pos.z, 0.0],
-            vel: p.vel.into(),
-            density: p.density,
-        }
-    }
 }
 
 #[repr(C)]
@@ -59,24 +43,24 @@ struct SimUniform {
     dt: f32,
     gravity: f32,
     smoothing_radius: f32,
-    _pad: u32,
+    stiffness: f32,
+    rest_density: f32,
+    mass: f32,
+    _pad: [f32; 2],
 }
 
 impl SimUniform {
-    pub fn new(
-        size: [f32; 3],
-        collision_damping: f32,
-        dt: f32,
-        gravity: f32,
-        smoothing_radius: f32,
-    ) -> Self {
+    pub fn new(config: &SimConfig, dt: f32) -> Self {
         Self {
-            size,
-            collision_damping,
+            size: config.size,
+            collision_damping: config.damping,
             dt,
-            gravity,
-            smoothing_radius,
-            _pad: 0,
+            gravity: config.gravity,
+            smoothing_radius: config.smoothing_radius,
+            stiffness: config.pressure_multiplier,
+            rest_density: config.target_density,
+            mass: config.mass,
+            _pad: [0.0; 2],
         }
     }
 }
@@ -85,17 +69,13 @@ struct SimResources {
     uniform: wgpu::Buffer,
     particles_next: wgpu::Buffer,
     particles_prev: wgpu::Buffer,
+    particle_density: wgpu::Buffer,
+    start_indices: wgpu::Buffer,
 }
 
 impl SimResources {
-    fn new(device: &wgpu::Device, config: &SimConfig, particles: &[Particle]) -> Self {
-        let sim_uniform = SimUniform::new(
-            config.size,
-            config.damping,
-            0.0,
-            config.gravity,
-            config.smoothing_radius,
-        );
+    fn new(device: &wgpu::Device, config: &SimConfig, particles: &[ParticleRaw]) -> Self {
+        let sim_uniform = SimUniform::new(config, 0.0);
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("sim uniform buffer"),
@@ -103,39 +83,44 @@ impl SimResources {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let particle_data = particles
-            .iter()
-            .map(ParticleRaw::from_particle)
-            .collect::<Vec<_>>();
-
-        let particle_next_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("input_buffer"),
-            contents: bytemuck::cast_slice(&particle_data),
+        let particle_prev_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("prev_buffer"),
+            contents: bytemuck::cast_slice(&particles),
             usage: {
                 use wgpu::BufferUsages;
-                BufferUsages::COPY_DST
-                    | BufferUsages::COPY_SRC
-                    | BufferUsages::STORAGE
-                    | BufferUsages::VERTEX
+                BufferUsages::STORAGE | BufferUsages::VERTEX
             },
         });
 
-        let particle_prev_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("prev_buffer"),
-            contents: bytemuck::cast_slice(&particle_data),
+        let particle_next_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("next_buffer"),
+            contents: bytemuck::cast_slice(&particles),
             usage: {
                 use wgpu::BufferUsages;
-                BufferUsages::COPY_DST
-                    | BufferUsages::COPY_SRC
-                    | BufferUsages::STORAGE
-                    | BufferUsages::VERTEX
+                BufferUsages::STORAGE | BufferUsages::VERTEX
             },
+        });
+
+        let particle_density_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("particle_density_buffer"),
+            size: (std::mem::size_of::<f32>() * particles.len()) as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
+        let start_indices_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("start_indices_buffer"),
+            size: (std::mem::size_of::<u32>() * particles.len()) as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
         });
 
         Self {
             uniform: uniform_buffer,
             particles_next: particle_next_buffer,
             particles_prev: particle_prev_buffer,
+            particle_density: particle_density_buffer,
+            start_indices: start_indices_buffer,
         }
     }
 }
@@ -143,7 +128,6 @@ impl SimResources {
 struct SimLayouts {
     uniform_layout: wgpu::BindGroupLayout,
     particle_layout: wgpu::BindGroupLayout,
-
     spatial_upload_layout: wgpu::BindGroupLayout,
 }
 
@@ -186,34 +170,55 @@ impl SimLayouts {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
 
-        let spatial_upload_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("spatial_upload_bind_group_layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+        let spatial_upload_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("spatial_upload_bind_group_layout"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                },
-            ],
-        });
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
 
         Self {
             uniform_layout,
@@ -231,7 +236,12 @@ struct SimBindGroups {
 }
 
 impl SimBindGroups {
-    fn new(device: &wgpu::Device, layouts: &SimLayouts, resources: &SimResources, sorter: &Sorter) -> Self {
+    fn new(
+        device: &wgpu::Device,
+        layouts: &SimLayouts,
+        resources: &SimResources,
+        sorter: &Sorter,
+    ) -> Self {
         let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("sim_bind_group"),
             layout: &layouts.uniform_layout,
@@ -253,6 +263,10 @@ impl SimBindGroups {
                     binding: 1,
                     resource: resources.particles_prev.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: resources.particle_density.as_entire_binding(),
+                },
             ],
         });
 
@@ -267,6 +281,10 @@ impl SimBindGroups {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: resources.particles_prev.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: resources.particle_density.as_entire_binding(),
                 },
             ],
         });
@@ -283,6 +301,10 @@ impl SimBindGroups {
                     binding: 1,
                     resource: sorter.values().as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: resources.start_indices.as_entire_binding(),
+                },
             ],
         });
 
@@ -295,38 +317,53 @@ impl SimBindGroups {
     }
 }
 
-struct ComputePipeline {
-    pipeline: wgpu::ComputePipeline,
+struct SphPipeline {
+    compute_density: wgpu::ComputePipeline,
+    main: wgpu::ComputePipeline,
     swap: bool,
 }
 
-impl ComputePipeline {
+impl SphPipeline {
     fn new(
+        shader: &wgpu::ShaderModule,
         device: &wgpu::Device,
         uniform_layout: &wgpu::BindGroupLayout,
         particle_layout: &wgpu::BindGroupLayout,
         spatial_upload_layout: &wgpu::BindGroupLayout,
     ) -> Self {
         // todo: naga oil shader composition of final compute shader
-        let shader = device.create_shader_module(wgpu::include_wgsl!("simple_compute.wgsl"));
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Sim Pipeline Layout"),
-            bind_group_layouts: &[Some(uniform_layout), Some(particle_layout), Some(spatial_upload_layout)],
+            bind_group_layouts: &[
+                Some(uniform_layout),
+                Some(particle_layout),
+                Some(spatial_upload_layout),
+            ],
             immediate_size: 0,
         });
 
-        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        let compute_density = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("compute sim pipeline"),
             layout: Some(&pipeline_layout),
             module: &shader,
-            entry_point: Some("apply_pressure"),
+            entry_point: Some("compute_density"),
+            compilation_options: Default::default(),
+            cache: Default::default(),
+        });
+
+        let main = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("main sim pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &shader,
+            entry_point: Some("main"),
             compilation_options: Default::default(),
             cache: Default::default(),
         });
 
         Self {
-            pipeline,
+            compute_density,
+            main,
             swap: false,
         }
     }
@@ -342,15 +379,109 @@ impl ComputePipeline {
         let num_items_per_workgroup = 64;
         let num_dispatches = num_particles.div_ceil(num_items_per_workgroup) as u32;
 
-        let mut pass = encoder.begin_compute_pass(&Default::default());
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, uniforms, &[]);
-        pass.set_bind_group(1, particles, &[]);
-        pass.set_bind_group(2, spatial_grid, &[]);
+        {
+            let mut pass = encoder.begin_compute_pass(&Default::default());
+            pass.set_bind_group(0, uniforms, &[]);
+            pass.set_bind_group(1, particles, &[]);
+            pass.set_bind_group(2, spatial_grid, &[]);
 
-        pass.dispatch_workgroups(num_dispatches, 1, 1);
+            pass.set_pipeline(&self.compute_density);
+            pass.dispatch_workgroups(num_dispatches, 1, 1);
+
+            pass.set_pipeline(&self.main);
+            pass.dispatch_workgroups(num_dispatches, 1, 1);
+        }
 
         self.swap = !self.swap;
+    }
+}
+
+struct SpatialGridPipeline {
+    upload: wgpu::ComputePipeline,
+    start_indices: wgpu::ComputePipeline,
+}
+
+impl SpatialGridPipeline {
+    fn new(
+        shader: &wgpu::ShaderModule,
+        device: &wgpu::Device,
+        uniform_layout: &wgpu::BindGroupLayout,
+        particle_layout: &wgpu::BindGroupLayout,
+        spatial_upload_layout: &wgpu::BindGroupLayout,
+    ) -> Self {
+        let upload_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Spatial Grid Pipeline Layout"),
+            bind_group_layouts: &[
+                Some(uniform_layout),
+                Some(particle_layout),
+                Some(spatial_upload_layout),
+            ],
+            immediate_size: 0,
+        });
+
+        let start_indices_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Spatial Grid Start Indices Pipeline Layout"),
+            bind_group_layouts: &[None, None, Some(spatial_upload_layout)],
+            immediate_size: 0,
+        });
+
+        let upload_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("spatial grid upload pipeline"),
+            layout: Some(&upload_layout),
+            module: &shader,
+            entry_point: Some("upload_keys"),
+            compilation_options: Default::default(),
+            cache: Default::default(),
+        });
+
+        let start_indices_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("spatial grid start indices pipeline"),
+                layout: Some(&start_indices_layout),
+                module: &shader,
+                entry_point: Some("upload_start_indices"),
+                compilation_options: Default::default(),
+                cache: Default::default(),
+            });
+
+        Self {
+            upload: upload_pipeline,
+            start_indices: start_indices_pipeline,
+        }
+    }
+
+    fn dispatch(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        queue: &wgpu::Queue,
+        uniforms: &wgpu::BindGroup,
+        particles: &wgpu::BindGroup,
+        spatial_grid: &wgpu::BindGroup,
+        sorter: &Sorter,
+        num_particles: usize,
+    ) {
+        let num_items_per_workgroup = 64;
+        let num_dispatches = num_particles.div_ceil(num_items_per_workgroup) as u32;
+
+        {
+            let mut pass = encoder.begin_compute_pass(&Default::default());
+            pass.set_pipeline(&self.upload);
+            pass.set_bind_group(0, uniforms, &[]);
+            pass.set_bind_group(1, particles, &[]);
+            pass.set_bind_group(2, spatial_grid, &[]);
+
+            pass.dispatch_workgroups(num_dispatches, 1, 1);
+        }
+
+        sorter.sort(encoder, queue);
+
+        {
+            let mut pass = encoder.begin_compute_pass(&Default::default());
+            pass.set_pipeline(&self.start_indices);
+            pass.set_bind_group(2, spatial_grid, &[]);
+
+            pass.dispatch_workgroups(num_dispatches, 1, 1);
+        }
     }
 }
 
@@ -360,10 +491,10 @@ pub struct Sorter {
 }
 
 impl Sorter {
-    async fn new(device: &wgpu::Device, queue: &wgpu::Queue, num_particles: usize) -> Self {
-        let subgroup_size = guess_workgroup_size(device, queue).await.unwrap();
-        let sorter = GPUSorter::new(device, subgroup_size);
-        let sort_buffers = sorter.create_sort_buffers(&device, NonZeroU32::new(num_particles as u32).unwrap());
+    fn new(device: &wgpu::Device, num_particles: usize) -> Self {
+        let sorter = GPUSorter::new(device, 32);
+        let sort_buffers =
+            sorter.create_sort_buffers(&device, NonZeroU32::new(num_particles as u32).unwrap());
 
         Self {
             sorter,
@@ -385,7 +516,9 @@ impl Sorter {
 }
 
 pub struct Sim {
-    compute_pipeline: ComputePipeline,
+    sph_pipeline: SphPipeline,
+    spatial_grid_pipeline: SpatialGridPipeline,
+
     bind_group_layouts: SimLayouts,
     bind_groups: SimBindGroups,
     resources: SimResources,
@@ -397,14 +530,25 @@ pub struct Sim {
 impl Sim {
     const LOOK_AHEAD_FACTOR: f32 = 1.0 / 120.0;
 
-    pub async fn new(device: &wgpu::Device, queue: &wgpu::Queue, config: &SimConfig) -> Self {
+    pub fn new(device: &wgpu::Device, config: &SimConfig) -> Self {
+        let shader = device.create_shader_module(wgpu::include_wgsl!("sph.wgsl"));
+
         let particles = Self::create_particles(config);
         let resources = SimResources::new(device, config, &particles);
         let bind_group_layouts = SimLayouts::new(device);
-        let sorter = Sorter::new(device, queue, config.num_particles as usize).await;
+        let sorter = Sorter::new(device, config.num_particles as usize);
         let bind_groups = SimBindGroups::new(device, &bind_group_layouts, &resources, &sorter);
 
-        let compute_pipeline = ComputePipeline::new(
+        let sph_pipeline = SphPipeline::new(
+            &shader,
+            device,
+            &bind_group_layouts.uniform_layout,
+            &bind_group_layouts.particle_layout,
+            &bind_group_layouts.spatial_upload_layout,
+        );
+
+        let spatial_grid_pipeline = SpatialGridPipeline::new(
+            &shader,
             device,
             &bind_group_layouts.uniform_layout,
             &bind_group_layouts.particle_layout,
@@ -412,7 +556,8 @@ impl Sim {
         );
 
         Self {
-            compute_pipeline,
+            sph_pipeline,
+            spatial_grid_pipeline,
             bind_group_layouts,
             bind_groups,
             resources,
@@ -421,7 +566,7 @@ impl Sim {
         }
     }
 
-    fn create_particles(config: &SimConfig) -> Vec<Particle> {
+    fn create_particles(config: &SimConfig) -> Vec<ParticleRaw> {
         let n = config.num_particles as usize;
         let mut particles = Vec::with_capacity(n);
 
@@ -438,10 +583,8 @@ impl Sim {
             let y = (i / num_row) as f32 / num_col as f32 * height;
 
             let pos = Point3::new(x as f32 - width / 2.0, y as f32 - height / 2.0, 0.0);
-            particles.push(Particle {
-                pos,
-                vel: Vector3::new(0.0, 0.0, 0.0),
-                density: 0.0,
+            particles.push(ParticleRaw {
+                pos: [pos.x, pos.y, pos.z, 0.0],
             });
         }
         particles
@@ -450,32 +593,52 @@ impl Sim {
     pub fn resize_particle_buffers(&mut self, device: &wgpu::Device) {
         let particles = Self::create_particles(&self.config);
         self.resources = SimResources::new(device, &self.config, &particles);
-        self.bind_groups = SimBindGroups::new(device, &self.bind_group_layouts, &self.resources, &self.sorter);
+        self.bind_groups = SimBindGroups::new(
+            device,
+            &self.bind_group_layouts,
+            &self.resources,
+            &self.sorter,
+        );
     }
 
     pub fn reset(&mut self, device: &wgpu::Device) {
         let particles = Self::create_particles(&self.config);
         self.resources = SimResources::new(device, &self.config, &particles);
-        self.bind_groups = SimBindGroups::new(device, &self.bind_group_layouts, &self.resources, &self.sorter);
+        self.bind_groups = SimBindGroups::new(
+            device,
+            &self.bind_group_layouts,
+            &self.resources,
+            &self.sorter,
+        );
     }
 
     pub fn update_uniforms(&mut self, queue: &wgpu::Queue, dt: instant::Duration) {
         let dt = dt.as_secs_f32();
 
-        let sim_uniform = SimUniform::new(
-            self.config.size,
-            self.config.damping,
-            dt,
-            self.config.gravity,
-            self.config.smoothing_radius,
-        );
+        let sim_uniform = SimUniform::new(&self.config, dt);
         queue.write_buffer(&self.resources.uniform, 0, bytemuck::bytes_of(&sim_uniform));
     }
 
-    pub fn dispatch(&mut self, encoder: &mut wgpu::CommandEncoder) {
-        self.compute_pipeline.dispatch(
+    pub fn dispatch(&mut self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {
+        self.spatial_grid_pipeline.dispatch(
             encoder,
-            &self.bind_groups,
+            queue,
+            &self.bind_groups.uniform_bind_group,
+            &self.bind_groups.particle_bind_group_a,
+            &self.bind_groups.spatial_upload_bind_group,
+            &self.sorter,
+            self.config.num_particles as usize,
+        );
+
+        self.sph_pipeline.dispatch(
+            encoder,
+            &self.bind_groups.uniform_bind_group,
+            if self.sph_pipeline.swap {
+                &self.bind_groups.particle_bind_group_b
+            } else {
+                &self.bind_groups.particle_bind_group_a
+            },
+            &self.bind_groups.spatial_upload_bind_group,
             self.config.num_particles as usize,
         );
     }
@@ -493,7 +656,7 @@ impl Sim {
     }
 
     pub fn particle_buffer(&self) -> &wgpu::Buffer {
-        if self.compute_pipeline.swap {
+        if self.sph_pipeline.swap {
             &self.resources.particles_prev
         } else {
             &self.resources.particles_next

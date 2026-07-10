@@ -41,8 +41,8 @@ impl Pipeline {
         self.sim.reset(device);
     }
 
-    pub fn update_fixed(&mut self, encoder: &mut wgpu::CommandEncoder) {
-        self.sim.dispatch(encoder);
+    pub fn update_fixed(&mut self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {
+        self.sim.dispatch(encoder, queue);
     }
 
     pub fn update_config(

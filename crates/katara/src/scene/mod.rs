@@ -83,7 +83,7 @@ impl Scene {
             accumulator: instant::Duration::ZERO,
             fixed_dt: instant::Duration::from_secs_f32(1.0 / Self::SIM_HZ as f32),
             config: scene_config.clone(),
-            steps: 0
+            steps: 0,
         })
     }
 
@@ -104,14 +104,20 @@ impl Scene {
         self.paused
     }
 
-    pub fn update(&mut self, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, dt: instant::Duration, view_proj: &Matrix4<f32>) {
+    pub fn update(
+        &mut self,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        dt: instant::Duration,
+        view_proj: &Matrix4<f32>,
+    ) {
         if !self.paused {
             self.accumulator += dt;
 
             let mut steps = 0;
 
             while self.accumulator >= self.fixed_dt && steps < Self::MAX_STEPS {
-                self.pipeline.update_fixed(encoder, self.fixed_dt);
+                self.pipeline.update_fixed(encoder, queue, self.fixed_dt);
                 self.accumulator -= self.fixed_dt;
                 steps += 1;
             }
@@ -121,7 +127,7 @@ impl Scene {
             }
         } else {
             for _ in 0..self.steps {
-                self.pipeline.update_fixed(encoder, self.fixed_dt);
+                self.pipeline.update_fixed(encoder, queue, self.fixed_dt);
             }
             self.steps = 0;
         }
