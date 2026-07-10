@@ -2,6 +2,11 @@ struct Particle {
     pos: vec4<f32>,
 }
 
+struct VelocityDensity {
+    vel: vec3<f32>,
+    density: f32,
+}
+
 struct ParticleData {
     pos: vec3<f32>,
     vel: vec3<f32>,
@@ -26,7 +31,8 @@ struct SimConfig {
 // ping pong buffers
 @group(1) @binding(0) var<storage, read> particles_prev: array<Particle>;
 @group(1) @binding(1) var<storage, read_write> particles_next: array<Particle>;
-@group(1) @binding(2) var<storage, read_write> particle_density: array<f32>;
+@group(1) @binding(2) var<storage, read_write> particle_vel_density: array<VelocityDensity>;
+
 
 // spatial hashing
 @group(2) @binding(0) var<storage, read_write> grid_keys: array<u32>;
@@ -49,27 +55,46 @@ fn hash_cell(cell: vec3<i32>) -> u32 {
     return x ^ y ^ z;
 }
 
+fn get_key(cell: vec3<i32>, length: u32) -> u32 {
+    var hash = hash_cell(cell);
+    return hash % length;
+}
+
+fn get_start_idx(key: u32) -> u32 {
+    return start_indices[key] - 1;
+}
+
 fn apply_gravity(vel: vec3<f32>) -> vec3<f32> {
     return vel + -vec3<f32>(0.0, 1.0, 0.0) * config.gravity * config.dt;
 }
 
-fn fetch_particle(index: u32, fetch_density: bool) -> ParticleData {
+fn fetch_particle(index: u32, fetch_velocity: bool, fetch_density: bool) -> ParticleData {
     var p = particles_prev[index];
-    var p_old = particles_next[index];
     var pos = p.pos.xyz;
 
-    // compute velocity from previous position (dt is fixed)
-    var vel = (pos - p_old.pos.xyz) / config.dt;
-
+    // compute velocity from previous position (dt is fixed), data race in main pass
+    var vel: vec3<f32>;
+    var density: f32;
+    if !fetch_velocity {
+        var p_old = particles_next[index];
+        vel = (pos - p_old.pos.xyz) / config.dt;
+        density = select(
+            0.0,
+            particle_vel_density[index].density,
+            fetch_density
+        );
+        vel = apply_gravity(vel);
+    } else {
+        var vel_density = particle_vel_density[index];
+        vel = vel_density.vel;
+        density = select(
+            0.0,
+            vel_density.density,
+            fetch_density
+        );
+    }
     // apply gravity to get predicted
-    vel = apply_gravity(vel);
     var predicted = pos + vel * config.dt;
-
-    var density = select(
-        particle_density[index],
-        0.0,
-        fetch_density
-    );
 
     return ParticleData(pos, vel, predicted, density);
 }
@@ -82,7 +107,6 @@ fn smoothing_kernel(radius: f32, dst: f32) -> f32 {
     if dst >= radius {
         return 0.0;
     }
-
     var volume = PI * pow(radius, 4.0) / 6.0;
     var off = radius - dst;
     return off * off / volume;
@@ -124,11 +148,11 @@ fn upload_keys(
         return;
     }
     
-    var p = fetch_particle(index, false);
+    var p = fetch_particle(index, false, false);
 
     // compute spatial hash
     var cell = position_to_cell(p.predicted);
-    var key = hash_cell(cell) % len;
+    var key = get_key(cell, len);
     grid_keys[index] = key;
     particle_indices[index] = index;
 }
@@ -148,12 +172,12 @@ fn upload_start_indices(
         return;
     }
 
+    var key = grid_keys[index];
+
     // first particle always starts at 0
     // if the key is different than the previous, this is a new start index
-    if index == 0u || grid_keys[index] != grid_keys[index - 1u] {
-        start_indices[index] = index;
-    } else {
-        start_indices[index] = MAX_U32; // invalid
+    if index == 0u || key != grid_keys[index - 1u] {
+        start_indices[key] = index + 1;
     }
 }
 
@@ -172,7 +196,7 @@ fn compute_density(
         return;
     }
 
-    var p = fetch_particle(index, false);
+    var p = fetch_particle(index, false,false);
 
     // compute density
     var cell = position_to_cell(p.predicted);
@@ -181,8 +205,8 @@ fn compute_density(
     for (var i = 0u; i < 9; i++) {
         var offset = CELL_OFFSETS[i];
         var curr_cell = cell + vec3<i32>(offset.x, offset.y, 0);
-        var key = hash_cell(curr_cell) % len;
-        var cell_start_idx = start_indices[key];
+        var key = get_key(curr_cell, len);
+        var cell_start_idx = get_start_idx(key);
         if cell_start_idx == MAX_U32 {
             continue;
         }
@@ -193,15 +217,15 @@ fn compute_density(
             }
             
             var other_idx = particle_indices[j];
-            var other = fetch_particle(other_idx, false);
-            var other_cell = position_to_cell(other.pos);
+            var other = fetch_particle(other_idx, false, false);
+            var other_cell = position_to_cell(other.predicted);
             if (any(other_cell != curr_cell)) {
                 continue;
             }
 
             var offset = other.predicted - p.predicted;
             var sq_dst = dot(offset, offset);
-            if sq_dst > sq_radius {
+            if sq_dst < sq_radius {
                 var dst = sqrt(sq_dst);
                 var influence = smoothing_kernel(config.smoothing_radius, dst);
                 p.density += config.mass * influence;
@@ -209,7 +233,19 @@ fn compute_density(
         }
     }
 
-    particle_density[index] = p.density;
+    // for (var i = 0u; i < len; i++) {
+    //     var other = fetch_particle(i, false);
+    //     var offset = other.predicted - p.predicted;
+    //     var sq_dst = dot(offset, offset);
+    //     if sq_dst < sq_radius {
+    //         var dst = sqrt(sq_dst);
+    //         var influence = smoothing_kernel(config.smoothing_radius, dst);
+    //         p.density += config.mass * influence;
+    //     }
+    // }
+
+    particle_vel_density[index].vel = p.vel;
+    particle_vel_density[index].density = p.density;
 }
 
 // sync computed density globally
@@ -227,11 +263,10 @@ fn main(
         return;
     }
 
-    var p = fetch_particle(index, true);
-
+    var p = fetch_particle(index, true, true);
     // todo: it's possible that some threads write to memory before other threads read for copmuting velocity
     // solve this by dipatching per cell, not per particle
-    workgroupBarrier();
+    // workgroupBarrier();
 
     // compute pressure force
     var cell = position_to_cell(p.predicted);
@@ -242,8 +277,8 @@ fn main(
     for (var i = 0u; i < 9; i++) {
         var offset = CELL_OFFSETS[i];
         var curr_cell = cell + vec3<i32>(offset.x, offset.y, 0);
-        var key = hash_cell(curr_cell) % len;
-        var cell_start_idx = start_indices[key];
+        var key = get_key(curr_cell, len);
+        var cell_start_idx = get_start_idx(key);
         if cell_start_idx == MAX_U32 {
             continue;
         }
@@ -254,23 +289,23 @@ fn main(
             }
             
             var other_idx = particle_indices[j];
-            var other = fetch_particle(other_idx, false);
-            var other_cell = position_to_cell(other.pos);
+            var other = fetch_particle(other_idx, true, true);
+            var other_cell = position_to_cell(other.predicted);
             if (any(other_cell != curr_cell)) {
                 continue;
             }
 
             var offset = other.predicted - p.predicted;
             var sq_dst = dot(offset, offset);
-            if sq_dst > sq_radius {
+            if sq_dst < sq_radius {
                 if j == index {
                     continue;
                 }
                 var dst = sqrt(sq_dst);
                 var slope: f32 = smoothing_kernel_deriv(config.smoothing_radius, dst);
 
-                // handle dst = 0.0 case (move in rand direction, in this case normalize is faster)
-                var dir = select(-offset / dst, normalize(p.pos), dst < EPSILON);
+                // handle dst = 0.0 case (move in random non degeneerate dir)
+                var dir = select(offset / dst, vec3<f32>(1.0, 0.0, 0.0), dst == 0.0);
                 
                 // shared pressure + neighbor density
                 var other_pressure = density_to_pressure(other.density);

@@ -69,7 +69,7 @@ struct SimResources {
     uniform: wgpu::Buffer,
     particles_next: wgpu::Buffer,
     particles_prev: wgpu::Buffer,
-    particle_density: wgpu::Buffer,
+    particle_vel_density: wgpu::Buffer,
     start_indices: wgpu::Buffer,
 }
 
@@ -101,9 +101,9 @@ impl SimResources {
             },
         });
 
-        let particle_density_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("particle_density_buffer"),
-            size: (std::mem::size_of::<f32>() * particles.len()) as wgpu::BufferAddress,
+        let particle_vel_density_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("particle_vel_density_buffer"),
+            size: (4 * std::mem::size_of::<f32>() * particles.len()) as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
@@ -111,7 +111,7 @@ impl SimResources {
         let start_indices_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("start_indices_buffer"),
             size: (std::mem::size_of::<u32>() * particles.len()) as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::STORAGE,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -119,7 +119,7 @@ impl SimResources {
             uniform: uniform_buffer,
             particles_next: particle_next_buffer,
             particles_prev: particle_prev_buffer,
-            particle_density: particle_density_buffer,
+            particle_vel_density: particle_vel_density_buffer,
             start_indices: start_indices_buffer,
         }
     }
@@ -265,7 +265,7 @@ impl SimBindGroups {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: resources.particle_density.as_entire_binding(),
+                    resource: resources.particle_vel_density.as_entire_binding(),
                 },
             ],
         });
@@ -284,7 +284,7 @@ impl SimBindGroups {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: resources.particle_density.as_entire_binding(),
+                    resource: resources.particle_vel_density.as_entire_binding(),
                 },
             ],
         });
@@ -344,7 +344,7 @@ impl SphPipeline {
         });
 
         let compute_density = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("compute sim pipeline"),
+            label: Some("compute density pipeline"),
             layout: Some(&pipeline_layout),
             module: &shader,
             entry_point: Some("compute_density"),
@@ -451,6 +451,7 @@ impl SpatialGridPipeline {
         uniforms: &wgpu::BindGroup,
         particles: &wgpu::BindGroup,
         spatial_grid: &wgpu::BindGroup,
+        start_indices: &wgpu::Buffer,
         sorter: &Sorter,
         num_particles: usize,
     ) {
@@ -468,6 +469,10 @@ impl SpatialGridPipeline {
         }
 
         sorter.sort(encoder, queue);
+
+        {
+            encoder.clear_buffer(start_indices, 0, Some(num_particles as u64));
+        }
 
         {
             let mut pass = encoder.begin_compute_pass(&Default::default());
@@ -622,6 +627,7 @@ impl Sim {
             &self.bind_groups.uniform_bind_group,
             &self.bind_groups.particle_bind_group_a,
             &self.bind_groups.spatial_upload_bind_group,
+            &self.resources.start_indices,
             &self.sorter,
             self.config.num_particles as usize,
         );
