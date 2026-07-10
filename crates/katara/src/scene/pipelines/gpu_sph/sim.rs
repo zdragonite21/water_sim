@@ -23,8 +23,8 @@ pub struct ParticleRaw {
 }
 
 impl ParticleRaw {
-    const ATTRIBS: [wgpu::VertexAttribute; 3] =
-        wgpu::vertex_attr_array![5 => Float32x3, 6 => Float32x3, 7 => Float32];
+    const ATTRIBS: [wgpu::VertexAttribute; 1] =
+        wgpu::vertex_attr_array![5 => Float32x4];
 
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
@@ -409,7 +409,7 @@ impl SpatialGridPipeline {
         particle_layout: &wgpu::BindGroupLayout,
         spatial_upload_layout: &wgpu::BindGroupLayout,
     ) -> Self {
-        let upload_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Spatial Grid Pipeline Layout"),
             bind_group_layouts: &[
                 Some(uniform_layout),
@@ -419,15 +419,9 @@ impl SpatialGridPipeline {
             immediate_size: 0,
         });
 
-        let start_indices_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Spatial Grid Start Indices Pipeline Layout"),
-            bind_group_layouts: &[None, None, Some(spatial_upload_layout)],
-            immediate_size: 0,
-        });
-
         let upload_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("spatial grid upload pipeline"),
-            layout: Some(&upload_layout),
+            layout: Some(&layout),
             module: &shader,
             entry_point: Some("upload_keys"),
             compilation_options: Default::default(),
@@ -437,7 +431,7 @@ impl SpatialGridPipeline {
         let start_indices_pipeline =
             device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
                 label: Some("spatial grid start indices pipeline"),
-                layout: Some(&start_indices_layout),
+                layout: Some(&layout),
                 module: &shader,
                 entry_point: Some("upload_start_indices"),
                 compilation_options: Default::default(),

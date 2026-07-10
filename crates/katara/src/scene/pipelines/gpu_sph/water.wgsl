@@ -9,9 +9,7 @@ struct WaterUniform {
 }
 
 struct InstanceInput {
-    @location(5) position: vec3<f32>,
-    @location(6) velocity: vec3<f32>,
-    @location(7) density: f32,
+    @location(5) position: vec4<f32>,
 };
 
 @group(0) @binding(0)
@@ -28,7 +26,7 @@ struct VertexInput {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) uv: vec2<f32>,
-    @location(2) velocity: vec3<f32>,
+    // @location(2) velocity: vec3<f32>,
 };
 
 @vertex
@@ -38,11 +36,11 @@ fn vs_main(model: VertexInput, instance: InstanceInput) -> VertexOutput {
     view_orient[3] = vec4<f32>(0.0, 0.0, 0.0, 1.0);
 
     var billboard_offset = transpose(view_orient) * vec4<f32>(model.position * water_config.particle_size, 0.0);
-    var pos = vec4<f32>(instance.position, 1.0) + billboard_offset;
+    var pos = vec4<f32>(instance.position.xyz, 1.0) + billboard_offset;
 
     out.clip_position = camera.proj * camera.view * pos;
     out.uv = model.uv;
-    out.velocity = instance.velocity;
+    // out.velocity = instance.velocity;
     return out;
 }
 
@@ -107,9 +105,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     //     mix(vec3(1.0), BLUE, strength),
     //     error >= 0.0
     // );
-    let mag = length(in.velocity);
-    let strength = mag / 10.0;
-    let color = color_ramp(strength);
+    // let mag = length(in.velocity);
+    // let strength = mag / 10.0;
+    // let color = color_ramp(strength);
+
+    let color = vec3<f32>(0.0, 0.5, 1.0);
 
     return light_intensity * vec4(color, 1.0);
 }
