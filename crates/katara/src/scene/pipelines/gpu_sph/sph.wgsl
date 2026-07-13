@@ -94,8 +94,9 @@ fn upload_keys(
 ) {
     // buffers
     let r_pos = &buff_a;
-    let r_vel = &buff_c;
     let w_pos = &buff_b;
+    let r_vel = &buff_c;
+    let w_vel = &buff_d;
 
     // setup
     var len = arrayLength(r_pos);
@@ -106,8 +107,7 @@ fn upload_keys(
     }
 
     var pos = (*r_pos)[index].xyz;
-    var vel_density = (*r_vel)[index];
-    var vel = vel_density.xyz;
+    var vel = (*r_vel)[index].xyz;
     vel = apply_gravity(vel);
     // apply gravity to get predicted
     var predicted = pos + vel * LOOK_AHEAD_FACTOR;
@@ -118,6 +118,7 @@ fn upload_keys(
     keys[index] = key;
     indices[index] = index;
     (*w_pos)[index]  = vec4<f32>(predicted, 0.0);
+    (*w_vel)[index] = vec4<f32>(vel, 0.0);
 }
 
 // sort between passes
@@ -166,9 +167,9 @@ fn gather_particles(
 ) {
     // buffers
     let r_pos = &buff_b;
-    let r_vel = &buff_c;
     let w_pos = &buff_a;
-    let w_vel = &buff_d;
+    let r_vel = &buff_d;
+    let w_vel = &buff_c;
 
     // setup
     var len = arrayLength(r_pos);
@@ -180,8 +181,8 @@ fn gather_particles(
 
     var sorted_idx = indices[index];
 
-    (*w_pos)[sorted_idx] = (*r_pos)[index];
-    (*w_vel)[sorted_idx] = (*r_vel)[index];
+    (*w_pos)[index] = (*r_pos)[sorted_idx];
+    (*w_vel)[index] = (*r_vel)[sorted_idx];
 }
 
 @compute
@@ -191,7 +192,7 @@ fn compute_density(
 ) {
     // buffers
     let r_pos = &buff_a;
-    let w_pos = &buff_b;
+    let w_pos_density = &buff_b;
 
     // setup
     var len = arrayLength(r_pos);
@@ -238,7 +239,7 @@ fn compute_density(
         }
     }
 
-    (*w_pos)[index] = vec4<f32>(predicted, density);
+    (*w_pos_density)[index] = vec4<f32>(predicted, density);
 }
 
 // sync computed density globally
@@ -249,19 +250,19 @@ fn pressure_viscosity(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
     // buffers
-    let r_pos = &buff_b;
-    let r_vel = &buff_d;
-    let w_pos = &buff_a;
+    let r_pos_density = &buff_b;
+    let w_pos_density = &buff_a;
+    let rw_vel = &buff_c;
 
     // setup
-    var len = arrayLength(r_pos);
+    var len = arrayLength(r_pos_density);
     var index = gid.x;
 
     if index >= len {
         return;
     }
 
-    var pos_density  = (*r_pos)[index];
+    var pos_density  = (*r_pos_density)[index];
     var predicted = pos_density.xyz;
     var density = pos_density.w;
 
@@ -284,7 +285,7 @@ fn pressure_viscosity(
         var end_idx = ivl.end_idx - 1u;
 
         for (var other_idx = start_idx; other_idx < end_idx; other_idx++) {
-            var other_predicted_density = (*r_pos)[other_idx];
+            var other_predicted_density = (*r_pos_density)[other_idx];
             var other_predicted = other_predicted_density.xyz;
             var other_density = other_predicted_density.w;
 
@@ -326,7 +327,7 @@ fn pressure_viscosity(
 
     // apply pressure force
     let pressure_accel = pressure_force / max(density, EPSILON);
-    var vel = (*r_vel)[index].xyz;
+    var vel = (*rw_vel)[index].xyz;
 
     // integrate velocity
     var pos = predicted - vel * LOOK_AHEAD_FACTOR;
@@ -335,7 +336,8 @@ fn pressure_viscosity(
     pos += vel * config.dt;
 
     // store ssbo
-    (*w_pos)[index] = vec4<f32>(pos, density);
+    (*w_pos_density)[index] = vec4<f32>(pos, density);
+    (*rw_vel)[index] = vec4<f32>(vel, 0.0);
 }
 
 @compute
@@ -344,24 +346,22 @@ fn handle_collisions(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
     // buffers
-    let r_pos = &buff_a;
-    let r_vel = &buff_d;
-    let w_pos = &buff_b;
-    let w_vel_density = &buff_c;
+    let rw_pos_density = &buff_a;
+    let rw_vel = &buff_c;
 
     // setup
-    var len = arrayLength(r_pos);
+    var len = arrayLength(rw_pos_density);
     var index = gid.x;
 
     if index >= len {
         return;
     }
 
-    var pos_density = (*r_pos)[index];
+    var pos_density = (*rw_pos_density)[index];
     var pos = pos_density.xyz;
     var density = pos_density.w;
 
-    var vel = (*r_vel)[index].xyz;
+    var vel = (*rw_vel)[index].xyz;
 
     // handle collisions
     var half_bound_size = config.size / 2.0;
@@ -370,6 +370,6 @@ fn handle_collisions(
     pos = select(pos, sign(pos) * half_bound_size, collided);
     vel *= select(vec3(1.0), -vec3(1.0 - damping), collided);
 
-    (*w_pos)[index] = vec4<f32>(pos, 1.0);
-    (*w_vel_density)[index] = vec4<f32>(vel, density);
+    (*rw_pos_density)[index] = vec4<f32>(pos, density);
+    (*rw_vel)[index] = vec4<f32>(vel, 0.0);
 }
