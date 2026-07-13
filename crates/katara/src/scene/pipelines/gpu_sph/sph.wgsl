@@ -1,12 +1,3 @@
-struct Particle {
-    pos: vec4<f32>,
-}
-
-struct VelocityDensity {
-    vel: vec3<f32>,
-    density: f32,
-}
-
 struct ParticleData {
     pos: vec3<f32>,
     vel: vec3<f32>,
@@ -25,18 +16,24 @@ struct SimConfig {
     mass: f32,
 };
 
+    struct Interval {
+    start_idx: u32,
+    end_idx: u32,
+}
+
 // uniforms
 @group(0) @binding(0) var<uniform> config: SimConfig;
 
 // ping pong buffers
-@group(1) @binding(0) var<storage, read> particles_prev: array<Particle>;
-@group(1) @binding(1) var<storage, read_write> particles_next: array<Particle>;
-@group(1) @binding(2) var<storage, read_write> particle_vel_density: array<VelocityDensity>;
+@group(1) @binding(0) var<storage, read_write> buff_a: array<vec4<f32>>;
+@group(1) @binding(1) var<storage, read_write> buff_b: array<vec4<f32>>;
+@group(1) @binding(2) var<storage, read_write> buff_c: array<vec4<f32>>;
+@group(1) @binding(3) var<storage, read_write> buff_d: array<vec4<f32>>;
 
 // spatial hashing
-@group(2) @binding(0) var<storage, read_write> grid_keys: array<u32>;
-@group(2) @binding(1) var<storage, read_write> particle_indices: array<u32>;
-@group(2) @binding(2) var<storage, read_write> start_indices: array<u32>;
+@group(2) @binding(0) var<storage, read_write> keys: array<u32>;
+@group(2) @binding(1) var<storage, read_write> indices: array<u32>;
+@group(2) @binding(2) var<storage, read_write> intervals: array<Interval>;
 
 fn position_to_cell(pos: vec3<f32>) -> vec3<i32> {
     return vec3<i32>(floor(pos / config.smoothing_radius));
@@ -59,42 +56,8 @@ fn get_key(cell: vec3<i32>, length: u32) -> u32 {
     return hash % length;
 }
 
-fn get_start_idx(key: u32) -> u32 {
-    // let encoded_start = start_indices[key];
-    // if encoded_start == 0u {
-    //     continue;
-    // }
-    // let cell_start_idx = encoded_start - 1u;    
-    return start_indices[key] - 1;
-}
-
 fn apply_gravity(vel: vec3<f32>) -> vec3<f32> {
     return vel + -vec3<f32>(0.0, 1.0, 0.0) * config.gravity * config.dt;
-}
-
-fn fetch_particle(index: u32, fetch_density: bool) -> ParticleData {
-    var p = particles_prev[index];
-    var pos = p.pos.xyz;
-
-    // select still computes -> data race
-    var vel_density = particle_vel_density[index];
-    
-    var vel = vel_density.vel;
-    vel = apply_gravity(vel);
-
-    var density = 0.0;
-    if fetch_density {
-        density = particle_vel_density[index].density;
-    }
-    
-    // apply gravity to get predicted
-    var predicted = pos + vel * LOOK_AHEAD_FACTOR;
-
-    return ParticleData(pos, vel, predicted, density);
-}
-
-fn store_particle(index: u32, p: ParticleData) {
-    particles_next[index].pos = vec4<f32>(p.pos, 1.0);
 }
 
 fn smoothing_kernel(radius: f32, dst: f32) -> f32 {
@@ -128,28 +91,41 @@ const CELL_OFFSETS: array<vec2<i32>, 9> = array(
 const PI: f32 = 3.14159265359;
 const MAX_U32: u32 = 0xffffffffu;
 const EPSILON: f32 = 0.0001;
-const LOOK_AHEAD_FACTOR: f32 = 1.0 / 120.0;
+const LOOK_AHEAD_NUM = 120.0;
+const LOOK_AHEAD_FACTOR: f32 = 1.0 / LOOK_AHEAD_NUM;
 
 @compute
 @workgroup_size(64)
 fn upload_keys(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
+    // buffers
+    let r_pos = &buff_a;
+    let r_vel = &buff_c;
+    let w_pos = &buff_b;
+
     // setup
-    var len = arrayLength(&particles_prev);
+    var len = arrayLength(r_pos);
     var index = gid.x;
 
     if index >= len {
         return;
     }
 
-    var p = fetch_particle(index, false);
+    var pos = (*r_pos)[index].xyz;
+    var vel_density = (*r_vel)[index];
+    var vel = vel_density.xyz;
+    vel = apply_gravity(vel);
+    // apply gravity to get predicted
+    var predicted = pos + vel * LOOK_AHEAD_FACTOR;
+    var p = ParticleData(pos, vel, predicted, 0.0);
 
     // compute spatial hash
     var cell = position_to_cell(p.predicted);
     var key = get_key(cell, len);
-    grid_keys[index] = key;
-    particle_indices[index] = index;
+    keys[index] = key;
+    indices[index] = index;
+    (*w_pos)[index]  = vec4<f32>(predicted, 0.0);
 }
 
 // sort between passes
@@ -159,76 +135,118 @@ fn upload_keys(
 fn upload_start_indices(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
+    // buffers
+    let r_pos = &buff_b;
+
     // setup
-    var len = arrayLength(&particles_prev);
+    var len = arrayLength(r_pos);
     var index = gid.x;
 
     if index >= len {
         return;
     }
 
-    var key = grid_keys[index];
+    let key = keys[index];
 
-    // first particle always starts at 0
-    // if the key is different than the previous, this is a new start index
-    if index == 0u || key != grid_keys[index - 1u] {
-        start_indices[key] = index + 1;
+    // 0 is our sentinel value
+    if index == 0u {
+        intervals[key].start_idx = 1u;
+    } else {
+        // most cases
+        let prev_key = keys[index - 1u];
+
+        if key != prev_key {
+            intervals[prev_key].end_idx = index + 1;
+            intervals[key].start_idx = index + 1;
+        }
+    }
+
+    // Close the final interval
+    if index == len - 1u {
+        intervals[key].end_idx = len + 1u;
     }
 }
 
-// sync start indices
+@compute
+@workgroup_size(64)
+fn gather_particles(
+    @builtin(global_invocation_id) gid: vec3<u32>
+) {
+    // buffers
+    let r_pos = &buff_b;
+    let r_vel = &buff_c;
+    let w_pos = &buff_a;
+    let w_vel = &buff_d;
+
+    // setup
+    var len = arrayLength(r_pos);
+    var index = gid.x;
+
+    if index >= len {
+        return;
+    }
+
+    var sorted_idx = indices[index];
+
+    (*w_pos)[sorted_idx] = (*r_pos)[index];
+    (*w_vel)[sorted_idx] = (*r_vel)[index];
+}
 
 @compute
 @workgroup_size(64)
 fn compute_density(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
+    // buffers
+    let r_pos = &buff_a;
+    let w_pos = &buff_b;
+
     // setup
-    var len = arrayLength(&particles_prev);
+    var len = arrayLength(r_pos);
     var index = gid.x;
 
     if index >= len {
         return;
     }
 
-    var p = fetch_particle(index, false);
+    // fetch particle
+    var predicted = (*r_pos)[index].xyz;
 
     // compute density
-    var cell = position_to_cell(p.predicted);
+    var cell = position_to_cell(predicted);
     var sq_radius = config.smoothing_radius * config.smoothing_radius;
 
+    var density = 0.0;
     for (var i = 0u; i < 9; i++) {
         var offset = CELL_OFFSETS[i];
         var curr_cell = cell + vec3<i32>(offset.x, offset.y, 0);
         var key = get_key(curr_cell, len);
-        var cell_start_idx = get_start_idx(key);
-        if cell_start_idx == MAX_U32 {
+        var ivl = intervals[key];
+        if ivl.start_idx == 0u {
             continue;
         }
 
-        for (var j = cell_start_idx; j < len; j++) {
-            if grid_keys[j] != key {
-                break;
-            }
+        var start_idx = ivl.start_idx - 1u;
+        var end_idx = ivl.end_idx - 1u;
 
-            var other_idx = particle_indices[j];
-            var other = fetch_particle(other_idx, false);
-            var other_cell = position_to_cell(other.predicted);
+        for (var other_idx = start_idx; other_idx < end_idx; other_idx++) {
+            var other_predicted = (*r_pos)[other_idx].xyz;
+            var other_cell = position_to_cell(other_predicted);
             if any(other_cell != curr_cell) {
                 continue;
             }
 
-            var offset = other.predicted - p.predicted;
+            var offset = other_predicted - predicted;
             var sq_dst = dot(offset, offset);
             if sq_dst < sq_radius {
                 var dst = sqrt(sq_dst);
                 var influence = smoothing_kernel(config.smoothing_radius, dst);
-                p.density += config.mass * influence;
+                density += config.mass * influence;
             }
         }
     }
 
-    particle_vel_density[index].density = p.density;
+    (*w_pos)[index] = vec4<f32>(predicted, density);
 }
 
 // sync computed density globally
@@ -238,44 +256,52 @@ fn compute_density(
 fn pressure_viscosity(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
+    // buffers
+    let r_pos = &buff_b;
+    let r_vel = &buff_d;
+    let w_pos = &buff_a;
+
     // setup
-    var len = arrayLength(&particles_prev);
+    var len = arrayLength(r_pos);
     var index = gid.x;
 
     if index >= len {
         return;
     }
 
-    var p = fetch_particle(index, true);
+    var pos_density  = (*r_pos)[index];
+    var predicted = pos_density.xyz;
+    var density = pos_density.w;
 
     // compute pressure force
-    var cell = position_to_cell(p.predicted);
+    var cell = position_to_cell(predicted);
     var sq_radius = config.smoothing_radius * config.smoothing_radius;
 
     var pressure_force: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
-    var pressure = density_to_pressure(p.density);
+    var pressure = density_to_pressure(density);
     for (var i = 0u; i < 9; i++) {
         var offset = CELL_OFFSETS[i];
         var curr_cell = cell + vec3<i32>(offset.x, offset.y, 0);
         var key = get_key(curr_cell, len);
-        var cell_start_idx = get_start_idx(key);
-        if cell_start_idx == MAX_U32 {
+        var ivl = intervals[key];
+        if ivl.start_idx == 0u {
             continue;
         }
 
-        for (var j = cell_start_idx; j < len; j++) {
-            if grid_keys[j] != key {
-                break;
-            }
+        var start_idx = ivl.start_idx - 1u;
+        var end_idx = ivl.end_idx - 1u;
 
-            var other_idx = particle_indices[j];
-            var other = fetch_particle(other_idx, true);
-            var other_cell = position_to_cell(other.predicted);
+        for (var other_idx = start_idx; other_idx < end_idx; other_idx++) {
+            var other_predicted_density = (*r_pos)[other_idx];
+            var other_predicted = other_predicted_density.xyz;
+            var other_density = other_predicted_density.w;
+
+            var other_cell = position_to_cell(other_predicted);
             if any(other_cell != curr_cell) {
                 continue;
             }
 
-            var offset = other.predicted - p.predicted;
+            var offset = other_predicted - predicted;
             var sq_dst = dot(offset, offset);
             if sq_dst < sq_radius {
                 if other_idx == index {
@@ -298,36 +324,26 @@ fn pressure_viscosity(
                 }
 
                 // shared pressure + neighbor density
-                var other_pressure = density_to_pressure(other.density);
+                var other_pressure = density_to_pressure(other_density);
                 var shared_pressure = (pressure + other_pressure) / 2.0;
 
-                pressure_force += shared_pressure * dir * slope * config.mass / max(other.density, EPSILON);
+                pressure_force += shared_pressure * dir * slope * config.mass / max(other_density, EPSILON);
             }
         }
     }
 
     // apply pressure force
-    let pressure_accel = pressure_force / max(p.density, EPSILON);
-    p.vel += pressure_accel * config.dt;
+    let pressure_accel = pressure_force / max(density, EPSILON);
+    var vel = (*r_vel)[index].xyz;
 
     // integrate velocity
-    p.pos += p.vel * config.dt;
+    var pos = predicted - vel * LOOK_AHEAD_FACTOR;
+
+    vel += pressure_accel * config.dt;
+    pos += vel * config.dt;
 
     // store ssbo
-    store_particle(index, p);
-}
-
-fn fetch_particle_collision(index: u32) -> ParticleData {
-    var p = particles_next[index];
-    var pos = p.pos.xyz;
-
-    // compute velocity from previous position (dt is fixed), data race in main pass
-    // select still computes -> data race
-    var p_prev = particles_prev[index];
-    // todo? handle config.dt == 0.0?
-    var vel = (pos - p_prev.pos.xyz) / config.dt;
-
-    return ParticleData(pos, vel, vec3(0.0), 0.0);
+    (*w_pos)[index] = vec4<f32>(pos, density);
 }
 
 @compute
@@ -335,23 +351,33 @@ fn fetch_particle_collision(index: u32) -> ParticleData {
 fn handle_collisions(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
+    // buffers
+    let r_pos = &buff_a;
+    let r_vel = &buff_d;
+    let w_pos = &buff_b;
+    let w_vel_density = &buff_c;
+
     // setup
-    var len = arrayLength(&particles_prev);
+    var len = arrayLength(r_pos);
     var index = gid.x;
 
     if index >= len {
         return;
     }
 
-    var p = fetch_particle_collision(index);
+    var pos_density = (*r_pos)[index];
+    var pos = pos_density.xyz;
+    var density = pos_density.w;
+
+    var vel = (*r_vel)[index].xyz;
 
     // handle collisions
     var half_bound_size = config.size / 2.0;
     var damping = config.collision_damping;
-    var collided = abs(p.pos) > half_bound_size;
-    p.pos = select(p.pos, sign(p.pos) * half_bound_size, collided);
-    p.vel *= select(vec3(1.0), -vec3(1.0 - damping), collided);
+    var collided = abs(pos) > half_bound_size;
+    pos = select(pos, sign(pos) * half_bound_size, collided);
+    vel *= select(vec3(1.0), -vec3(1.0 - damping), collided);
 
-    particles_next[index].pos = vec4<f32>(p.pos, 1.0);
-    particle_vel_density[index].vel = p.vel;
+    (*w_pos)[index] = vec4<f32>(pos, 1.0);
+    (*w_vel_density)[index] = vec4<f32>(vel, density);
 }
