@@ -1,10 +1,3 @@
-struct ParticleData {
-    pos: vec3<f32>,
-    vel: vec3<f32>,
-    predicted: vec3<f32>,
-    density: f32,
-}
-
 struct SimConfig {
     size: vec3<f32>,
     collision_damping: f32,
@@ -118,10 +111,9 @@ fn upload_keys(
     vel = apply_gravity(vel);
     // apply gravity to get predicted
     var predicted = pos + vel * LOOK_AHEAD_FACTOR;
-    var p = ParticleData(pos, vel, predicted, 0.0);
 
     // compute spatial hash
-    var cell = position_to_cell(p.predicted);
+    var cell = position_to_cell(predicted);
     var key = get_key(cell, len);
     keys[index] = key;
     indices[index] = index;
