@@ -263,24 +263,33 @@ impl SphPipeline {
         let num_dispatches = num_particles.div_ceil(WORKGROUP_SIZE) as u32;
 
         {
-            let mut pass = encoder.begin_compute_pass(&Default::default());
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Water SPH / simulation"),
+                ..Default::default()
+            });
             pass.set_bind_group(0, uniforms, &[]);
             pass.set_bind_group(1, particles, &[]);
             pass.set_bind_group(2, spatial_grid, &[]);
 
             gpu_profile!(gpu_frame, &mut pass, "Density", {
+                pass.push_debug_group("Water SPH / density");
                 pass.set_pipeline(&self.compute_density);
                 pass.dispatch_workgroups(num_dispatches, 1, 1);
+                pass.pop_debug_group();
             });
 
             gpu_profile!(gpu_frame, &mut pass, "Pressure and viscosity", {
+                pass.push_debug_group("Water SPH / pressure and viscosity");
                 pass.set_pipeline(&self.pressure_viscosity);
                 pass.dispatch_workgroups(num_dispatches, 1, 1);
+                pass.pop_debug_group();
             });
 
             gpu_profile!(gpu_frame, &mut pass, "Collision and integration", {
+                pass.push_debug_group("Water SPH / collision and integration");
                 pass.set_pipeline(&self.collisions);
                 pass.dispatch_workgroups(num_dispatches, 1, 1);
+                pass.pop_debug_group();
             });
         }
     }
@@ -320,12 +329,17 @@ impl SpatialGridPipeline {
         let num_dispatches = num_particles.div_ceil(WORKGROUP_SIZE) as u32;
 
         gpu_profile!(gpu_frame, encoder, "Grid key upload", {
-            let mut pass = encoder.begin_compute_pass(&Default::default());
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Water SPH / grid key upload"),
+                ..Default::default()
+            });
             pass.set_pipeline(&self.upload);
             pass.set_bind_group(0, uniforms, &[]);
             pass.set_bind_group(1, particles, &[]);
             pass.set_bind_group(2, spatial_grid, &[]);
+            pass.push_debug_group("Water SPH / grid key upload");
             pass.dispatch_workgroups(num_dispatches, 1, 1);
+            pass.pop_debug_group();
         });
 
         gpu_profile!(gpu_frame, encoder, "Radix sort", {
@@ -334,21 +348,31 @@ impl SpatialGridPipeline {
 
         gpu_profile!(gpu_frame, encoder, "Grid start indices", {
             encoder.clear_buffer(intervals, 0, None);
-            let mut pass = encoder.begin_compute_pass(&Default::default());
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Water SPH / grid start indices"),
+                ..Default::default()
+            });
             pass.set_pipeline(&self.start_indices);
             pass.set_bind_group(0, uniforms, &[]);
             pass.set_bind_group(1, particles, &[]);
             pass.set_bind_group(2, spatial_grid, &[]);
+            pass.push_debug_group("Water SPH / grid start indices");
             pass.dispatch_workgroups(num_dispatches, 1, 1);
+            pass.pop_debug_group();
         });
 
         gpu_profile!(gpu_frame, encoder, "Gather particles", {
-            let mut pass = encoder.begin_compute_pass(&Default::default());
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Water SPH / gather particles"),
+                ..Default::default()
+            });
             pass.set_pipeline(&self.gather);
             pass.set_bind_group(0, uniforms, &[]);
             pass.set_bind_group(1, particles, &[]);
             pass.set_bind_group(2, spatial_grid, &[]);
+            pass.push_debug_group("Water SPH / gather particles");
             pass.dispatch_workgroups(num_dispatches, 1, 1);
+            pass.pop_debug_group();
         });
     }
 }
