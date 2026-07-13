@@ -1,7 +1,7 @@
 mod cpu_sph;
 mod gpu_sph;
 
-use crate::{inspect::Inspect, stats::DebugStats};
+use crate::{inspect::Inspect, profiling::GpuFrameRecorder, stats::DebugStats};
 use cgmath::Matrix4;
 use serde::{Deserialize, Serialize};
 
@@ -79,10 +79,11 @@ impl ActivePipeline {
         encoder: &mut wgpu::CommandEncoder,
         queue: &wgpu::Queue,
         dt: instant::Duration,
+        gpu_frame: Option<&GpuFrameRecorder>,
     ) {
         match self {
             Self::CpuSph(pipeline) => pipeline.update_fixed(dt),
-            Self::GpuSph(pipeline) => pipeline.update_fixed(encoder, queue),
+            Self::GpuSph(pipeline) => pipeline.update_fixed(encoder, queue, gpu_frame),
         }
     }
 

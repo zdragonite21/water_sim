@@ -2,7 +2,7 @@ mod config;
 mod renderer;
 mod sim;
 
-use crate::scene::pipelines::PipelineId;
+use crate::{profiling::GpuFrameRecorder, scene::pipelines::PipelineId};
 use renderer::BillboardRenderer;
 use sim::{Sim, Stats};
 
@@ -47,8 +47,13 @@ impl Pipeline {
         self.renderer.reset(device, self.sim.vel_density_buffer());
     }
 
-    pub fn update_fixed(&mut self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {
-        self.sim.dispatch(encoder, queue);
+    pub fn update_fixed(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        queue: &wgpu::Queue,
+        gpu_frame: Option<&GpuFrameRecorder>,
+    ) {
+        self.sim.dispatch(encoder, queue, gpu_frame);
     }
 
     pub fn update_config(

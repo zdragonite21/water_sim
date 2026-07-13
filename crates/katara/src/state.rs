@@ -12,6 +12,7 @@ use crate::{
     camera::CameraRig,
     config::{AppConfig, WindowConfig},
     debug_watch,
+    profiling::{GpuFrameRecorder, Profiler, gpu_profile},
     scene::Scene,
 };
 use crate::{frame_clock::FrameClock, gui::Gui};
@@ -28,6 +29,7 @@ pub struct State {
     scene: Scene,
     frame_clock: FrameClock,
     gui: Gui,
+    profiler: Profiler,
 }
 
 impl State {
@@ -61,10 +63,19 @@ impl State {
             info.driver_info,
         );
 
+        let profiling_features = wgpu_profiler::GpuProfiler::ALL_WGPU_TIMER_FEATURES;
+        let gpu_profiling_supported =
+            !cfg!(target_arch = "wasm32") && adapter.features().contains(profiling_features);
+        let required_features = if gpu_profiling_supported {
+            profiling_features
+        } else {
+            wgpu::Features::empty()
+        };
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
-                required_features: wgpu::Features::empty(),
+                required_features,
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 required_limits: wgpu::Limits::defaults(),
                 memory_hints: Default::default(),
@@ -114,6 +125,7 @@ impl State {
         let frame_clock = FrameClock::new();
 
         let gui = Gui::new(&device, &queue, &window, surface_format);
+        let profiler = Profiler::new(&device, gpu_profiling_supported);
 
         Ok(Self {
             window,
@@ -126,6 +138,7 @@ impl State {
             scene,
             frame_clock,
             gui,
+            profiler,
         })
     }
 
@@ -310,22 +323,36 @@ impl State {
         return Ok((output, reconfigure_after_present, encoder));
     }
 
-    fn update(&mut self, encoder: &mut wgpu::CommandEncoder, dt: instant::Duration) {
+    fn update(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        dt: instant::Duration,
+        gpu_frame: Option<&GpuFrameRecorder>,
+    ) {
         self.camera.update(&self.queue, dt);
-        self.scene
-            .update(&self.queue, encoder, dt, &self.camera.view_proj());
+        self.scene.update(
+            &self.queue,
+            encoder,
+            dt,
+            &self.camera.view_proj(),
+            gpu_frame,
+        );
     }
 
     fn render(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         output: &wgpu::SurfaceTexture,
+        gpu_frame: Option<&GpuFrameRecorder>,
     ) -> anyhow::Result<()> {
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        self.scene.render(encoder, &view, &self.camera.bind_group)?;
+        let render_result = gpu_profile!(gpu_frame, encoder, "GPU Frame Time/Particle render", {
+            self.scene.render(encoder, &view, &self.camera.bind_group)
+        });
+        render_result?;
 
         let scene_stats = self.scene.stats();
 
@@ -339,6 +366,7 @@ impl State {
             self.camera.config_mut(),
             self.scene.config_mut(),
             &scene_stats,
+            &mut self.profiler,
         )?;
 
         Ok(())
@@ -351,6 +379,7 @@ impl State {
         reconfigure_after_present: bool,
     ) -> anyhow::Result<()> {
         self.queue.submit([encoder.finish()]);
+        self.profiler.finish_gpu_frame();
         output.present();
 
         if reconfigure_after_present {
@@ -364,20 +393,52 @@ impl State {
     pub fn frame(&mut self) -> anyhow::Result<()> {
         self.frame_clock.tick();
         debug_watch::begin_frame(self.frame_clock.frame_index, self.scene.paused());
+        let gpu_frame = self.profiler.begin_frame(&self.device, &self.queue);
 
-        if self.scene.sync_pipeline(
-            &self.device,
-            &self.queue,
-            &self.config,
-            &self.camera.bind_group_layout,
-        )? {
-            self.reset_scene();
+        let result = {
+            profiling::scope!("CPU Frame Time");
+            self.profiled_frame(gpu_frame)
+        };
+        self.profiler.finish_cpu_frame();
+        result
+    }
+
+    fn profiled_frame(&mut self, gpu_frame: Option<GpuFrameRecorder>) -> anyhow::Result<()> {
+        {
+            profiling::scope!("Scene/config sync");
+            if self.scene.sync_pipeline(
+                &self.device,
+                &self.queue,
+                &self.config,
+                &self.camera.bind_group_layout,
+            )? {
+                self.reset_scene();
+            }
         }
 
-        let (output, reconfigure_after_present, mut encoder) = self.begin_frame()?;
-        self.update(&mut encoder, self.frame_clock.dt);
-        self.render(&mut encoder, &output)?;
-        self.end_frame(encoder, output, reconfigure_after_present)?;
+        let (output, reconfigure_after_present, mut encoder) = {
+            profiling::scope!("Surface acquisition");
+            self.begin_frame()?
+        };
+
+        let render_result = gpu_profile!(gpu_frame.as_ref(), &mut encoder, "GPU Frame Time", {
+            {
+                profiling::scope!("Update encoding");
+                self.update(&mut encoder, self.frame_clock.dt, gpu_frame.as_ref());
+            }
+
+            {
+                profiling::scope!("Render and GUI encoding");
+                self.render(&mut encoder, &output, gpu_frame.as_ref())
+            }
+        });
+        self.profiler.resolve_gpu_queries(&mut encoder);
+
+        {
+            profiling::scope!("Submit and present");
+            self.end_frame(encoder, output, reconfigure_after_present)?;
+        }
+        render_result?;
         Ok(())
     }
 

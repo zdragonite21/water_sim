@@ -1,5 +1,6 @@
 use crate::config::CameraConfig;
 use crate::debug_watch;
+use crate::profiling::Profiler;
 use crate::{scene::SceneConfig, scene::SceneStats};
 use wgpu::{Device, Queue, TextureFormat};
 use winit::event::Event;
@@ -76,6 +77,7 @@ impl Gui {
         camera_settings: &mut CameraConfig,
         scene_config: &mut SceneConfig,
         scene_stats: &SceneStats,
+        profiler: &mut Profiler,
     ) -> anyhow::Result<()> {
         self.context.io_mut().update_delta_time(dt);
         self.platform.prepare_frame(self.context.io_mut(), window)?;
@@ -85,6 +87,7 @@ impl Gui {
         self.debug_text.draw(ui, scene_stats);
         camera_settings.draw(ui);
         scene_config.draw(ui);
+        profiler.draw(ui);
 
         self.platform.prepare_render(ui, window);
         let draw_data = self.context.render();

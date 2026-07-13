@@ -2,6 +2,7 @@
 use std::num::NonZeroU32;
 
 use super::config::SimConfig;
+use crate::profiling::{GpuFrameRecorder, gpu_profile};
 use crate::stats::debug_stats;
 use cgmath::{Point3, Vector3};
 
@@ -387,6 +388,7 @@ impl SphPipeline {
         particles: &wgpu::BindGroup,
         spatial_grid: &wgpu::BindGroup,
         num_particles: usize,
+        gpu_frame: Option<&GpuFrameRecorder>,
     ) {
         let num_items_per_workgroup = 64;
         let num_dispatches = num_particles.div_ceil(num_items_per_workgroup) as u32;
@@ -397,14 +399,30 @@ impl SphPipeline {
             pass.set_bind_group(1, particles, &[]);
             pass.set_bind_group(2, spatial_grid, &[]);
 
-            pass.set_pipeline(&self.compute_density);
-            pass.dispatch_workgroups(num_dispatches, 1, 1);
+            gpu_profile!(gpu_frame, &mut pass, "GPU Frame Time/Simulation/Density", {
+                pass.set_pipeline(&self.compute_density);
+                pass.dispatch_workgroups(num_dispatches, 1, 1);
+            });
 
-            pass.set_pipeline(&self.pressure_viscosity);
-            pass.dispatch_workgroups(num_dispatches, 1, 1);
+            gpu_profile!(
+                gpu_frame,
+                &mut pass,
+                "GPU Frame Time/Simulation/Pressure and viscosity",
+                {
+                    pass.set_pipeline(&self.pressure_viscosity);
+                    pass.dispatch_workgroups(num_dispatches, 1, 1);
+                }
+            );
 
-            pass.set_pipeline(&self.collisions);
-            pass.dispatch_workgroups(num_dispatches, 1, 1);
+            gpu_profile!(
+                gpu_frame,
+                &mut pass,
+                "GPU Frame Time/Simulation/Collision and integration",
+                {
+                    pass.set_pipeline(&self.collisions);
+                    pass.dispatch_workgroups(num_dispatches, 1, 1);
+                }
+            );
         }
 
         self.swap = !self.swap;
@@ -469,35 +487,48 @@ impl SpatialGridPipeline {
         start_indices: &wgpu::Buffer,
         sorter: &Sorter,
         num_particles: usize,
+        gpu_frame: Option<&GpuFrameRecorder>,
     ) {
         let num_items_per_workgroup = 64;
         let num_dispatches = num_particles.div_ceil(num_items_per_workgroup) as u32;
 
-        {
-            let mut pass = encoder.begin_compute_pass(&Default::default());
-            pass.set_pipeline(&self.upload);
-            pass.set_bind_group(0, uniforms, &[]);
-            pass.set_bind_group(1, particles, &[]);
-            pass.set_bind_group(2, spatial_grid, &[]);
+        gpu_profile!(
+            gpu_frame,
+            encoder,
+            "GPU Frame Time/Simulation/Grid key upload",
+            {
+                let mut pass = encoder.begin_compute_pass(&Default::default());
+                pass.set_pipeline(&self.upload);
+                pass.set_bind_group(0, uniforms, &[]);
+                pass.set_bind_group(1, particles, &[]);
+                pass.set_bind_group(2, spatial_grid, &[]);
+                pass.dispatch_workgroups(num_dispatches, 1, 1);
+            }
+        );
 
-            pass.dispatch_workgroups(num_dispatches, 1, 1);
-        }
+        gpu_profile!(
+            gpu_frame,
+            encoder,
+            "GPU Frame Time/Simulation/Radix sort",
+            {
+                sorter.sort(encoder, queue);
+            }
+        );
 
-        sorter.sort(encoder, queue);
-
-        {
-            encoder.clear_buffer(start_indices, 0, None);
-        }
-
-        {
-            let mut pass = encoder.begin_compute_pass(&Default::default());
-            pass.set_pipeline(&self.start_indices);
-            pass.set_bind_group(0, uniforms, &[]);
-            pass.set_bind_group(1, particles, &[]);
-            pass.set_bind_group(2, spatial_grid, &[]);
-
-            pass.dispatch_workgroups(num_dispatches, 1, 1);
-        }
+        gpu_profile!(
+            gpu_frame,
+            encoder,
+            "GPU Frame Time/Simulation/Grid start indices",
+            {
+                encoder.clear_buffer(start_indices, 0, None);
+                let mut pass = encoder.begin_compute_pass(&Default::default());
+                pass.set_pipeline(&self.start_indices);
+                pass.set_bind_group(0, uniforms, &[]);
+                pass.set_bind_group(1, particles, &[]);
+                pass.set_bind_group(2, spatial_grid, &[]);
+                pass.dispatch_workgroups(num_dispatches, 1, 1);
+            }
+        );
     }
 }
 
@@ -611,7 +642,7 @@ impl Sim {
     pub fn reset(&mut self, device: &wgpu::Device) {
         let particles = Self::create_particles(&self.config);
         self.num_particles = self.config.num_particles as usize;
-        
+
         self.resources = SimResources::new(device, &self.config, &particles);
         self.sorter = Sorter::new(device, self.num_particles);
         self.bind_groups = SimBindGroups::new(
@@ -629,7 +660,12 @@ impl Sim {
         queue.write_buffer(&self.resources.uniform, 0, bytemuck::bytes_of(&sim_uniform));
     }
 
-    pub fn dispatch(&mut self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {
+    pub fn dispatch(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        queue: &wgpu::Queue,
+        gpu_frame: Option<&GpuFrameRecorder>,
+    ) {
         let particles = if self.sph_pipeline.swap {
             &self.bind_groups.particle_bind_group_b
         } else {
@@ -645,6 +681,7 @@ impl Sim {
             &self.resources.start_indices,
             &self.sorter,
             self.num_particles,
+            gpu_frame,
         );
 
         self.sph_pipeline.dispatch(
@@ -653,6 +690,7 @@ impl Sim {
             particles,
             &self.bind_groups.spatial_upload_bind_group,
             self.num_particles,
+            gpu_frame,
         );
     }
 }

@@ -7,6 +7,7 @@ mod demo_scene;
 mod frame_clock;
 mod gui;
 mod inspect;
+mod profiling;
 mod render;
 mod scene;
 mod state;

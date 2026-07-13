@@ -27,6 +27,8 @@ rand = "0.10"
 naga_oil = "0.2"
 include-wgsl-oil = "0.2.9"
 wgpu_sort = { path = "../wgpu_sort" }
+profiling = { version = "1.0.18", features = ["profile-with-puffin"] }
+wgpu-profiler = "0.27"
 
 imgui = "0.12"
 imgui-winit-support = "0.13"
@@ -44,6 +46,7 @@ optional = true
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1"
 console_log = "1.0"
+puffin = { version = "0.20", features = ["web"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = [

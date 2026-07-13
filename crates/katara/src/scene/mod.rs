@@ -4,6 +4,7 @@ mod pipelines;
 use crate::scene::pipelines::{PipelineConfigs, PipelineId};
 use crate::{
     gui::Panel,
+    profiling::GpuFrameRecorder,
     scene::pipelines::{ActivePipeline, PipelineStats},
 };
 use cgmath::Matrix4;
@@ -60,8 +61,8 @@ pub struct Scene {
 }
 
 impl Scene {
-    const SIM_HZ: u64 = 120;
-    const MAX_STEPS: u8 = 8;
+    const SIM_HZ: u64 = 240;
+    const MAX_STEPS: u8 = 32;
 
     pub async fn new(
         device: &wgpu::Device,
@@ -110,14 +111,24 @@ impl Scene {
         encoder: &mut wgpu::CommandEncoder,
         dt: instant::Duration,
         view_proj: &Matrix4<f32>,
+        gpu_frame: Option<&GpuFrameRecorder>,
     ) {
+        let mut simulation_started = false;
+        let mut simulation_span = None;
         if !self.paused {
             self.accumulator += dt;
 
             let mut steps = 0;
 
             while self.accumulator >= self.fixed_dt && steps < Self::MAX_STEPS {
-                self.pipeline.update_fixed(encoder, queue, self.fixed_dt);
+                profiling::scope!("Simulation step");
+                if !simulation_started {
+                    simulation_span = gpu_frame
+                        .map(|frame| frame.begin_query("GPU Frame Time/Simulation", encoder));
+                    simulation_started = true;
+                }
+                self.pipeline
+                    .update_fixed(encoder, queue, self.fixed_dt, gpu_frame);
                 self.accumulator -= self.fixed_dt;
                 steps += 1;
             }
@@ -127,9 +138,19 @@ impl Scene {
             }
         } else {
             for _ in 0..self.steps {
-                self.pipeline.update_fixed(encoder, queue, self.fixed_dt);
+                profiling::scope!("Simulation step");
+                if !simulation_started {
+                    simulation_span = gpu_frame
+                        .map(|frame| frame.begin_query("GPU Frame Time/Simulation", encoder));
+                    simulation_started = true;
+                }
+                self.pipeline
+                    .update_fixed(encoder, queue, self.fixed_dt, gpu_frame);
             }
             self.steps = 0;
+        }
+        if let (Some(frame), Some(span)) = (gpu_frame, simulation_span) {
+            frame.end_query(encoder, span);
         }
         self.upload_scene_data(queue, view_proj);
     }
@@ -164,8 +185,12 @@ impl Scene {
             self.paused = true;
             Ok(true)
         } else {
-            self.pipeline
-                .update_config(device, queue, &self.config.pipeline_configs, self.fixed_dt);
+            self.pipeline.update_config(
+                device,
+                queue,
+                &self.config.pipeline_configs,
+                self.fixed_dt,
+            );
             Ok(false)
         }
     }
