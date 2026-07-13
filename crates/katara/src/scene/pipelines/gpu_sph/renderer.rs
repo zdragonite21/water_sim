@@ -51,7 +51,7 @@ impl BillboardRenderer {
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
         render_config: &RenderConfig,
-        vel_density_buffer: &wgpu::Buffer,
+        velocity_buffer: &wgpu::Buffer,
     ) -> anyhow::Result<Self> {
         let shader = device.create_shader_module(wgpu::include_wgsl!("water.wgsl"));
 
@@ -110,7 +110,7 @@ impl BillboardRenderer {
             layout: &sim_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: vel_density_buffer.as_entire_binding(),
+                resource: velocity_buffer.as_entire_binding(),
             }],
         });
 
@@ -190,7 +190,7 @@ impl BillboardRenderer {
         log::debug!("depth texture rebuilt {}x{}", config.width, config.height);
     }
 
-    pub fn reset(&mut self, device: &wgpu::Device, vel_density_buffer: &wgpu::Buffer) {
+    pub fn reset(&mut self, device: &wgpu::Device, velocity_buffer: &wgpu::Buffer) {
         let sim_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("sim_bind_group_layout"),
@@ -211,7 +211,7 @@ impl BillboardRenderer {
             layout: &sim_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: vel_density_buffer.as_entire_binding(),
+                resource: velocity_buffer.as_entire_binding(),
             }],
         });
         self.sim_bind_group = sim_bind_group;

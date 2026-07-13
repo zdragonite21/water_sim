@@ -30,11 +30,7 @@ struct VertexOutput {
     @location(3) density: f32,
 };
 
-struct VelocityDensity {
-    vel: vec3<f32>,
-    density: f32,
-}
-@group(2) @binding(0) var<storage, read> particle_vel_density: array<VelocityDensity>;
+@group(2) @binding(0) var<storage, read> particle_velocity: array<vec4<f32>>;
 
 @vertex
 fn vs_main(@builtin(instance_index) idx: u32, model: VertexInput, instance: InstanceInput) -> VertexOutput {
@@ -48,9 +44,8 @@ fn vs_main(@builtin(instance_index) idx: u32, model: VertexInput, instance: Inst
     out.clip_position = camera.proj * camera.view * pos;
     out.uv = model.uv;
 
-    var vel_density = particle_vel_density[idx];
-    out.velocity = vel_density.vel;
-    out.density = vel_density.density;
+    out.velocity = particle_velocity[idx].xyz;
+    out.density = instance.position.w;
 
     return out;
 }

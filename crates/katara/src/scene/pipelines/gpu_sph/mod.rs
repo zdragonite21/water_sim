@@ -28,7 +28,7 @@ impl Pipeline {
             surface_config,
             bind_group_layout,
             &config.render,
-            sim.vel_density_buffer(),
+            sim.velocity_buffer(),
         )?;
 
         Ok(Self { sim, renderer })
@@ -45,7 +45,7 @@ impl Pipeline {
 
     pub fn reset(&mut self, device: &wgpu::Device) {
         self.sim.reset(device);
-        self.renderer.reset(device, self.sim.vel_density_buffer());
+        self.renderer.reset(device, self.sim.velocity_buffer());
     }
 
     pub fn update_fixed(&mut self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {
