@@ -6,7 +6,7 @@ scroll_sens = 0.10000000149011612
 
 [window]
 width = 1600
-height = 986
+height = 1114
 
 [scene]
 active_pipeline = "gpu_sph"

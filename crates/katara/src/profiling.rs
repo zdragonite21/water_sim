@@ -1,20 +1,18 @@
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
-    sync::{Arc, Mutex},
+    collections::{HashMap, VecDeque},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use wgpu_profiler::{GpuProfilerQuery, GpuProfilerSettings, GpuTimerQueryResult};
 
 const HISTORY_SIZE: usize = 120;
-const GPU_FRAME: &str = "GPU Frame Time";
 
-/// Profiles one encoder/pass expression when GPU capture is active.
-///
-/// Use slash-separated labels to place a new measurement in the GUI tree:
-/// `gpu_profile!(gpu, encoder, "GPU Frame Time/Simulation/My pass", { ... })`.
 macro_rules! gpu_profile {
     ($gpu:expr, $recorder:expr, $label:expr, $body:block) => {{
-        let query = $gpu.map(|gpu| gpu.begin_query($label, $recorder));
+        let query = $gpu.and_then(|gpu| gpu.begin_query($label, $recorder));
         let result = $body;
         if let (Some(gpu), Some(query)) = ($gpu, query) {
             gpu.end_query($recorder, query);
@@ -24,20 +22,37 @@ macro_rules! gpu_profile {
 }
 pub(crate) use gpu_profile;
 
-/// A cheap per-frame handle to the crate-owned GPU profiler.
-///
-/// This is intentionally shared rather than threaded mutably through every
-/// render function. `wgpu-profiler` owns query allocation and readback state.
+struct GpuRecorder {
+    active: AtomicBool,
+    profiler: Mutex<wgpu_profiler::GpuProfiler>,
+}
+
 #[derive(Clone)]
-pub struct GpuFrameRecorder(Arc<Mutex<wgpu_profiler::GpuProfiler>>);
+pub struct GpuFrameRecorder(Arc<GpuRecorder>);
 
 impl GpuFrameRecorder {
+    fn new(device: &wgpu::Device) -> Self {
+        Self(Arc::new(GpuRecorder {
+            active: AtomicBool::new(false),
+            profiler: Mutex::new(
+                wgpu_profiler::GpuProfiler::new(device, GpuProfilerSettings::default()).unwrap(),
+            ),
+        }))
+    }
+
+    fn set_active(&self, active: bool) {
+        self.0.active.store(active, Ordering::Relaxed);
+    }
+
     pub fn begin_query<R: wgpu_profiler::ProfilerCommandRecorder>(
         &self,
         label: impl Into<String>,
         recorder: &mut R,
-    ) -> GpuProfilerQuery {
-        self.0.lock().unwrap().begin_query(label, recorder)
+    ) -> Option<GpuProfilerQuery> {
+        self.0
+            .active
+            .load(Ordering::Relaxed)
+            .then(|| self.0.profiler.lock().unwrap().begin_query(label, recorder))
     }
 
     pub fn end_query<R: wgpu_profiler::ProfilerCommandRecorder>(
@@ -45,8 +60,14 @@ impl GpuFrameRecorder {
         recorder: &mut R,
         query: GpuProfilerQuery,
     ) {
-        self.0.lock().unwrap().end_query(recorder, query);
+        self.0.profiler.lock().unwrap().end_query(recorder, query);
     }
+}
+
+#[derive(Default)]
+struct GpuSample {
+    measurements: HashMap<String, GpuMeasurement>,
+    order: Vec<String>,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -55,136 +76,120 @@ struct GpuMeasurement {
     calls: u32,
 }
 
-type GpuSample = HashMap<String, GpuMeasurement>;
-
-pub struct TimingRow {
-    pub label: String,
-    pub average_ms: f64,
-    pub maximum_ms: f64,
-    pub percent: f64,
-    pub calls: f64,
-}
-
-pub struct TimingNode {
-    pub row: TimingRow,
-    pub children: Vec<TimingNode>,
-}
-
-pub struct ProfileStats {
-    pub cpu: Vec<TimingNode>,
-    pub gpu: Vec<TimingNode>,
-    pub cpu_samples: usize,
-    pub gpu_samples: usize,
+struct TimingRow {
+    label: String,
+    average_ms: f64,
+    maximum_ms: f64,
+    calls: f64,
 }
 
 pub struct Profiler {
     capturing: bool,
     frame_capturing: bool,
     cpu: profiling::puffin::GlobalFrameView,
-    gpu: Option<Arc<Mutex<wgpu_profiler::GpuProfiler>>>,
+    cpu_rows: Vec<TimingRow>,
+    gpu: Option<GpuFrameRecorder>,
     gpu_history: VecDeque<GpuSample>,
+    gpu_rows: Vec<TimingRow>,
 }
 
 impl Profiler {
     pub fn new(device: &wgpu::Device, gpu_supported: bool) -> Self {
-        let gpu = gpu_supported.then(|| {
-            Arc::new(Mutex::new(
-                wgpu_profiler::GpuProfiler::new(device, GpuProfilerSettings::default()).unwrap(),
-            ))
-        });
-
         Self {
             capturing: false,
             frame_capturing: false,
             cpu: new_cpu_frame_view(),
-            gpu,
+            cpu_rows: Vec::new(),
+            gpu: gpu_supported.then(|| GpuFrameRecorder::new(device)),
             gpu_history: VecDeque::with_capacity(HISTORY_SIZE),
+            gpu_rows: Vec::new(),
         }
     }
 
-    pub fn begin_frame(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-    ) -> Option<GpuFrameRecorder> {
-        if let Some(gpu) = &self.gpu {
-            let mut gpu = gpu.lock().unwrap();
+    pub fn gpu_recorder(&self) -> Option<GpuFrameRecorder> {
+        self.gpu.clone()
+    }
+
+    pub fn begin_frame(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        if let Some(gpu) = self.gpu.clone() {
+            let mut profiler = gpu.0.profiler.lock().unwrap();
             let _ = device.poll(wgpu::PollType::Poll);
-            while let Some(results) = gpu.process_finished_frame(queue.get_timestamp_period()) {
-                if self.capturing {
-                    push_sample(&mut self.gpu_history, gpu_sample(results));
-                }
+            while let Some(results) = profiler.process_finished_frame(queue.get_timestamp_period())
+            {
+                push_sample(&mut self.gpu_history, gpu_sample(results));
+                self.gpu_rows = gpu_rows(&self.gpu_history);
             }
         }
 
         self.frame_capturing = self.capturing;
+        if let Some(gpu) = &self.gpu {
+            gpu.set_active(self.frame_capturing);
+        }
         profiling::puffin::set_scopes_on(self.frame_capturing);
-        self.frame_capturing
-            .then(|| self.gpu.as_ref().map(|gpu| GpuFrameRecorder(gpu.clone())))
-            .flatten()
     }
 
-    /// Adds the profiler's query resolve copies to this frame's encoder.
     pub fn resolve_gpu_queries(&mut self, encoder: &mut wgpu::CommandEncoder) {
         if self.frame_capturing {
             if let Some(gpu) = &self.gpu {
-                gpu.lock().unwrap().resolve_queries(encoder);
+                gpu.0.profiler.lock().unwrap().resolve_queries(encoder);
             }
         }
     }
 
-    /// Must run after the command buffer containing the query resolves is submitted.
     pub fn finish_gpu_frame(&mut self) {
         if self.frame_capturing {
             if let Some(gpu) = &self.gpu {
-                if let Err(error) = gpu.lock().unwrap().end_frame() {
+                if let Err(error) = gpu.0.profiler.lock().unwrap().end_frame() {
                     log::warn!("Could not finish GPU profiler frame: {error}");
                 }
             }
         }
     }
 
-    pub fn finish_cpu_frame(&self) {
+    pub fn finish_cpu_frame(&mut self) {
         if self.frame_capturing {
             profiling::finish_frame!();
+            self.cpu_rows = cpu_rows(&self.cpu);
         }
         profiling::puffin::set_scopes_on(false);
     }
 
     pub fn draw(&mut self, ui: &imgui::Ui) {
         let mut capturing = self.capturing;
-        let stats = self.stats();
-        let gpu_supported = self.gpu.is_some();
 
         ui.window("Profiler")
-            .size([430.0, 470.0], imgui::Condition::FirstUseEver)
+            .size([380.0, 420.0], imgui::Condition::FirstUseEver)
             .build(|| {
                 ui.checkbox("Capture profiling", &mut capturing);
                 ui.text(if capturing { "Capturing" } else { "Frozen" });
-                ui.same_line();
-                ui.text(format!("{} frame history", HISTORY_SIZE));
 
                 ui.separator();
-                if stats.cpu_samples == 0 {
-                    ui.text("CPU Frame Time");
-                    ui.text("Waiting for CPU results");
-                } else {
-                    for node in &stats.cpu {
-                        draw_timing_node(ui, node);
+                if let Some(frame) = frame_row(&self.cpu_rows) {
+                    draw_section_header(ui, "CPU", frame);
+                    ui.indent();
+                    for row in self.cpu_rows.iter().filter(|row| row.label != "Frame") {
+                        draw_cpu_timing_row(ui, row);
                     }
+                    ui.unindent();
+                } else {
+                    ui.text("CPU");
+                    ui.text("Waiting for results");
                 }
 
                 ui.separator();
-                if !gpu_supported {
-                    ui.text(GPU_FRAME);
+                if self.gpu.is_none() {
+                    ui.text("GPU");
                     ui.text("Unavailable on this device");
-                } else if stats.gpu_samples == 0 {
-                    ui.text(GPU_FRAME);
-                    ui.text("Waiting for GPU results");
-                } else {
-                    for node in &stats.gpu {
-                        draw_timing_node(ui, node);
+                } else if let Some(frame) = frame_row(&self.gpu_rows) {
+                    draw_section_header(ui, "GPU", frame);
+                    ui.indent();
+                    for row in self.gpu_rows.iter().filter(|row| row.label != "Frame") {
+                        draw_gpu_timing_row(ui, row, frame.average_ms);
                     }
+                    ui.unindent();
+                } else {
+                    ui.text("GPU");
+                    ui.text("Waiting for results");
                 }
             });
 
@@ -197,64 +202,20 @@ impl Profiler {
         self.capturing = capturing;
         if capturing {
             self.cpu = new_cpu_frame_view();
+            self.cpu_rows.clear();
             self.gpu_history.clear();
+            self.gpu_rows.clear();
         }
-    }
-
-    fn stats(&self) -> ProfileStats {
-        let (cpu, cpu_samples) = self.cpu_stats();
-        ProfileStats {
-            cpu,
-            gpu: gpu_stats(&self.gpu_history),
-            cpu_samples,
-            gpu_samples: self.gpu_history.len(),
-        }
-    }
-
-    fn cpu_stats(&self) -> (Vec<TimingNode>, usize) {
-        let view = self.cpu.lock();
-        let frames: Vec<_> = view
-            .latest_frames(HISTORY_SIZE)
-            .filter_map(|frame| frame.unpacked().ok())
-            .collect();
-        let sample_count = frames.len();
-        if frames.is_empty() {
-            return (Vec::new(), 0);
-        }
-
-        let Some(root_id) = view.scope_collection().fetch_by_name("CPU Frame Time") else {
-            return (Vec::new(), sample_count);
-        };
-        let Some(thread) = frames
-            .iter()
-            .flat_map(|frame| frame.thread_streams.keys())
-            .find(|thread| {
-                profiling::puffin::merge_scopes_for_thread(view.scope_collection(), &frames, thread)
-                    .is_ok_and(|scopes| scopes.iter().any(|scope| scope.id == *root_id))
-            })
-        else {
-            return (Vec::new(), sample_count);
-        };
-
-        let scopes =
-            profiling::puffin::merge_scopes_for_thread(view.scope_collection(), &frames, thread)
-                .unwrap_or_default();
-        let root_ns = scopes
-            .iter()
-            .find(|scope| scope.id == *root_id)
-            .map_or(0, |scope| scope.duration_per_frame_ns);
-        let nodes = scopes
-            .iter()
-            .map(|scope| timing_node(view.scope_collection(), scope, root_ns, sample_count))
-            .collect();
-        (nodes, sample_count)
     }
 }
 
 fn gpu_sample(results: Vec<GpuTimerQueryResult>) -> GpuSample {
     fn collect(result: GpuTimerQueryResult, sample: &mut GpuSample) {
         if let Some(time) = result.time {
-            let measurement = sample.entry(result.label).or_default();
+            if !sample.measurements.contains_key(&result.label) {
+                sample.order.push(result.label.clone());
+            }
+            let measurement = sample.measurements.entry(result.label).or_default();
             measurement.milliseconds += (time.end - time.start) * 1_000.0;
             measurement.calls += 1;
         }
@@ -263,105 +224,38 @@ fn gpu_sample(results: Vec<GpuTimerQueryResult>) -> GpuSample {
         }
     }
 
-    let mut sample = GpuSample::new();
+    let mut sample = GpuSample::default();
     for result in results {
         collect(result, &mut sample);
     }
     sample
 }
 
-#[derive(Default)]
-struct GpuTreeNode {
-    full_label: String,
-    children: BTreeMap<String, GpuTreeNode>,
-}
+fn gpu_rows(history: &VecDeque<GpuSample>) -> Vec<TimingRow> {
+    let mut labels = Vec::new();
+    for label in history.iter().flat_map(|sample| &sample.order) {
+        if !labels.contains(label) {
+            labels.push(label.clone());
+        }
+    }
 
-fn gpu_stats(history: &VecDeque<GpuSample>) -> Vec<TimingNode> {
-    let mut root = GpuTreeNode::default();
-    for label in history.iter().flat_map(|sample| sample.keys()) {
-        let mut node = &mut root;
-        let mut path = String::new();
-        for segment in label.split('/') {
-            if !path.is_empty() {
-                path.push('/');
+    labels
+        .into_iter()
+        .map(|label| {
+            let measurements = history
+                .iter()
+                .map(|sample| sample.measurements.get(&label).copied().unwrap_or_default());
+            let average_ms = average(measurements.clone().map(|value| value.milliseconds));
+            let maximum_ms = maximum(measurements.clone().map(|value| value.milliseconds));
+            let calls = average(measurements.map(|value| value.calls as f64));
+            TimingRow {
+                label,
+                average_ms,
+                maximum_ms,
+                calls,
             }
-            path.push_str(segment);
-            node = node.children.entry(segment.to_owned()).or_default();
-            node.full_label.clone_from(&path);
-        }
-    }
-
-    let root_average = average(
-        history
-            .iter()
-            .filter_map(|sample| sample.get(GPU_FRAME).map(|value| value.milliseconds)),
-    );
-    let mut nodes: Vec<_> = root
-        .children
-        .into_values()
-        .map(|node| gpu_timing_node(node, history, root_average))
-        .collect();
-    sort_gpu_nodes(&mut nodes);
-    nodes
-}
-
-fn gpu_timing_node(
-    node: GpuTreeNode,
-    history: &VecDeque<GpuSample>,
-    root_average: f64,
-) -> TimingNode {
-    let measurements = history
-        .iter()
-        .filter_map(|sample| sample.get(&node.full_label));
-    let average_ms = average(measurements.clone().map(|value| value.milliseconds));
-    let mut children: Vec<_> = node
-        .children
-        .into_values()
-        .map(|child| gpu_timing_node(child, history, root_average))
-        .collect();
-    sort_gpu_nodes(&mut children);
-
-    TimingNode {
-        row: TimingRow {
-            label: node
-                .full_label
-                .rsplit('/')
-                .next()
-                .unwrap_or_default()
-                .to_owned(),
-            average_ms,
-            maximum_ms: maximum(measurements.clone().map(|value| value.milliseconds)),
-            percent: if root_average > 0.0 {
-                average_ms / root_average * 100.0
-            } else {
-                0.0
-            },
-            calls: average(measurements.map(|value| value.calls as f64)),
-        },
-        children,
-    }
-}
-
-fn sort_gpu_nodes(nodes: &mut [TimingNode]) {
-    fn order(label: &str) -> usize {
-        match label {
-            "GPU Frame Time" => 0,
-            "Simulation" => 1,
-            "Grid key upload" => 2,
-            "Radix sort" => 3,
-            "Grid start indices" => 4,
-            "Density" => 5,
-            "Pressure and viscosity" => 6,
-            "Collision and integration" => 7,
-            "Particle render" => 8,
-            _ => 9,
-        }
-    }
-    nodes.sort_by(|left, right| {
-        order(&left.row.label)
-            .cmp(&order(&right.row.label))
-            .then_with(|| left.row.label.cmp(&right.row.label))
-    });
+        })
+        .collect()
 }
 
 fn new_cpu_frame_view() -> profiling::puffin::GlobalFrameView {
@@ -375,63 +269,109 @@ fn new_cpu_frame_view() -> profiling::puffin::GlobalFrameView {
     view
 }
 
-fn timing_node(
+fn cpu_rows(view: &profiling::puffin::GlobalFrameView) -> Vec<TimingRow> {
+    let view = view.lock();
+    let frames: Vec<_> = view
+        .latest_frames(HISTORY_SIZE)
+        .filter_map(|frame| frame.unpacked().ok())
+        .collect();
+    if frames.is_empty() {
+        return Vec::new();
+    }
+
+    let Some(frame_id) = view.scope_collection().fetch_by_name("Frame") else {
+        return Vec::new();
+    };
+    let Some(thread) = frames
+        .iter()
+        .flat_map(|frame| frame.thread_streams.keys())
+        .find(|thread| {
+            profiling::puffin::merge_scopes_for_thread(view.scope_collection(), &frames, thread)
+                .is_ok_and(|scopes| scopes.iter().any(|scope| scope.id == *frame_id))
+        })
+    else {
+        return Vec::new();
+    };
+
+    let scopes =
+        profiling::puffin::merge_scopes_for_thread(view.scope_collection(), &frames, thread)
+            .unwrap_or_default();
+    let mut rows = Vec::new();
+    for scope in &scopes {
+        collect_cpu_rows(view.scope_collection(), scope, frames.len(), &mut rows);
+    }
+    rows
+}
+
+fn collect_cpu_rows(
     scopes: &profiling::puffin::ScopeCollection,
     scope: &profiling::puffin::MergeScope<'_>,
-    root_ns: i64,
     frame_count: usize,
-) -> TimingNode {
-    let average_ms = scope.duration_per_frame_ns as f64 / 1_000_000.0;
-    TimingNode {
-        row: TimingRow {
-            label: scopes
-                .fetch_by_id(&scope.id)
-                .map_or("Unknown scope", |details| details.name())
-                .to_owned(),
-            average_ms,
+    rows: &mut Vec<TimingRow>,
+) {
+    let label = scopes
+        .fetch_by_id(&scope.id)
+        .map_or("Unknown scope", |details| details.name());
+    if is_cpu_scope(label) {
+        rows.push(TimingRow {
+            label: label.to_owned(),
+            average_ms: scope.duration_per_frame_ns as f64 / 1_000_000.0,
             maximum_ms: scope.max_duration_ns as f64 / 1_000_000.0,
-            percent: if root_ns > 0 {
-                scope.duration_per_frame_ns as f64 / root_ns as f64 * 100.0
-            } else {
-                0.0
-            },
             calls: scope.num_pieces as f64 / frame_count as f64,
-        },
-        children: scope
-            .children
-            .iter()
-            .map(|child| timing_node(scopes, child, root_ns, frame_count))
-            .collect(),
+        });
+    }
+    for child in &scope.children {
+        collect_cpu_rows(scopes, child, frame_count, rows);
     }
 }
 
-fn draw_timing_node(ui: &imgui::Ui, node: &TimingNode) {
-    if node.children.is_empty() {
-        ui.bullet_text(format!("{}  {:.3}", node.row.label, node.row.average_ms));
-        draw_timing_tooltip(ui, &node.row);
-    } else {
-        let token = ui
-            .tree_node_config(node.row.label.as_str())
-            .label::<String, String>(format!("{}  {:.3}", node.row.label, node.row.average_ms))
-            .default_open(true)
-            .push();
-        draw_timing_tooltip(ui, &node.row);
-        if let Some(_token) = token {
-            for child in &node.children {
-                draw_timing_node(ui, child);
-            }
-        }
-    }
+fn is_cpu_scope(label: &str) -> bool {
+    matches!(
+        label,
+        "Frame" | "Update and command encoding" | "Submit and present"
+    )
 }
 
-fn draw_timing_tooltip(ui: &imgui::Ui, row: &TimingRow) {
+fn draw_timing_row(ui: &imgui::Ui, row: &TimingRow) {
+    ui.text(format!("{}  {:.3} ms", row.label, row.average_ms));
+}
+
+fn draw_cpu_timing_row(ui: &imgui::Ui, row: &TimingRow) {
+    draw_timing_row(ui, row);
+    draw_timing_tooltip(ui, row, None);
+}
+
+fn draw_gpu_timing_row(ui: &imgui::Ui, row: &TimingRow, frame_ms: f64) {
+    draw_timing_row(ui, row);
+    draw_timing_tooltip(ui, row, Some(percentage(row.average_ms, frame_ms)));
+}
+
+fn draw_section_header(ui: &imgui::Ui, label: &str, row: &TimingRow) {
+    ui.text(format!("{}  {:.3} ms", label, row.average_ms));
+    draw_timing_tooltip(ui, row, None);
+}
+
+fn draw_timing_tooltip(ui: &imgui::Ui, row: &TimingRow, percent: Option<f64>) {
     if ui.is_item_hovered() {
         ui.tooltip(|| {
-            ui.text(format!(
-                "Units: ms\nAverage: {:.3}\nMaximum: {:.3}\nPercentage: {:.1}%\nCalls: {:.1}",
-                row.average_ms, row.maximum_ms, row.percent, row.calls
-            ));
+            ui.text(format!("Max: {:.3} ms", row.maximum_ms));
+            ui.text(format!("Calls/frame: {:.1}", row.calls));
+            if let Some(percent) = percent {
+                ui.text(format!("{percent:.1}% of GPU frame"));
+            }
         });
+    }
+}
+
+fn frame_row(rows: &[TimingRow]) -> Option<&TimingRow> {
+    rows.iter().find(|row| row.label == "Frame")
+}
+
+fn percentage(milliseconds: f64, frame_ms: f64) -> f64 {
+    if frame_ms > 0.0 {
+        milliseconds / frame_ms * 100.0
+    } else {
+        0.0
     }
 }
 
@@ -455,6 +395,16 @@ fn maximum(values: impl Iterator<Item = f64>) -> f64 {
 mod tests {
     use super::*;
 
+    fn result(label: &str, start: f64, end: f64) -> GpuTimerQueryResult {
+        GpuTimerQueryResult {
+            label: label.to_owned(),
+            pid: 0,
+            tid: std::thread::current().id(),
+            time: Some(start..end),
+            nested_queries: Vec::new(),
+        }
+    }
+
     #[test]
     fn history_keeps_the_newest_120_samples() {
         let mut history = VecDeque::new();
@@ -467,36 +417,62 @@ mod tests {
     }
 
     #[test]
-    fn gpu_labels_automatically_build_the_gui_tree() {
-        let mut history = VecDeque::new();
-        history.push_back(HashMap::from([
-            (
-                GPU_FRAME.to_owned(),
-                GpuMeasurement {
-                    milliseconds: 10.0,
-                    calls: 1,
-                },
-            ),
-            (
-                "GPU Frame Time/Simulation/New pass".to_owned(),
-                GpuMeasurement {
-                    milliseconds: 2.0,
-                    calls: 3,
-                },
-            ),
-        ]));
-
-        let stats = gpu_stats(&history);
-        assert_eq!(stats[0].row.label, GPU_FRAME);
-        assert_eq!(stats[0].children[0].row.label, "Simulation");
-        assert_eq!(stats[0].children[0].children[0].row.label, "New pass");
+    fn new_gpu_labels_appear_automatically() {
+        let history = VecDeque::from([gpu_sample(vec![result("New stage", 0.0, 0.002)])]);
+        let rows = gpu_rows(&history);
+        assert_eq!(rows[0].label, "New stage");
     }
 
     #[test]
-    fn cpu_frame_view_uses_the_gui_history_size() {
-        let view = new_cpu_frame_view();
-        let frames = view.lock();
-        assert_eq!(frames.max_recent(), HISTORY_SIZE);
-        assert_eq!(frames.max_slow(), 0);
+    fn repeated_gpu_labels_are_combined_per_frame() {
+        let sample = gpu_sample(vec![
+            result("Density", 0.0, 0.002),
+            result("Density", 0.002, 0.005),
+        ]);
+        let density = sample.measurements.get("Density").unwrap();
+        assert_eq!(density.milliseconds, 5.0);
+        assert_eq!(density.calls, 2);
+    }
+
+    #[test]
+    fn gpu_rows_keep_pass_order() {
+        let history = VecDeque::from([gpu_sample(vec![
+            result("Frame", 0.0, 0.010),
+            result("Grid key upload", 0.0, 0.001),
+            result("Radix sort", 0.001, 0.004),
+            result("Density", 0.004, 0.006),
+        ])]);
+        let labels: Vec<_> = gpu_rows(&history)
+            .into_iter()
+            .map(|row| row.label)
+            .collect();
+        assert_eq!(
+            labels,
+            ["Frame", "Grid key upload", "Radix sort", "Density"]
+        );
+    }
+
+    #[test]
+    fn missing_passes_count_as_zero_for_percentages() {
+        let history = VecDeque::from([
+            gpu_sample(vec![
+                result("Frame", 0.0, 0.010),
+                result("Density", 0.0, 0.002),
+            ]),
+            gpu_sample(vec![result("Frame", 0.0, 0.010)]),
+        ]);
+        let rows = gpu_rows(&history);
+        let frame = frame_row(&rows).unwrap();
+        let density = rows.iter().find(|row| row.label == "Density").unwrap();
+        assert_eq!(density.average_ms, 1.0);
+        assert_eq!(percentage(density.average_ms, frame.average_ms), 10.0);
+    }
+
+    #[test]
+    fn cpu_scope_filter_keeps_only_the_three_main_scopes() {
+        assert!(is_cpu_scope("Frame"));
+        assert!(is_cpu_scope("Update and command encoding"));
+        assert!(is_cpu_scope("Submit and present"));
+        assert!(!is_cpu_scope("CommandEncoder::finish"));
     }
 }

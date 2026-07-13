@@ -399,30 +399,20 @@ impl SphPipeline {
             pass.set_bind_group(1, particles, &[]);
             pass.set_bind_group(2, spatial_grid, &[]);
 
-            gpu_profile!(gpu_frame, &mut pass, "GPU Frame Time/Simulation/Density", {
+            gpu_profile!(gpu_frame, &mut pass, "Density", {
                 pass.set_pipeline(&self.compute_density);
                 pass.dispatch_workgroups(num_dispatches, 1, 1);
             });
 
-            gpu_profile!(
-                gpu_frame,
-                &mut pass,
-                "GPU Frame Time/Simulation/Pressure and viscosity",
-                {
-                    pass.set_pipeline(&self.pressure_viscosity);
-                    pass.dispatch_workgroups(num_dispatches, 1, 1);
-                }
-            );
+            gpu_profile!(gpu_frame, &mut pass, "Pressure and viscosity", {
+                pass.set_pipeline(&self.pressure_viscosity);
+                pass.dispatch_workgroups(num_dispatches, 1, 1);
+            });
 
-            gpu_profile!(
-                gpu_frame,
-                &mut pass,
-                "GPU Frame Time/Simulation/Collision and integration",
-                {
-                    pass.set_pipeline(&self.collisions);
-                    pass.dispatch_workgroups(num_dispatches, 1, 1);
-                }
-            );
+            gpu_profile!(gpu_frame, &mut pass, "Collision and integration", {
+                pass.set_pipeline(&self.collisions);
+                pass.dispatch_workgroups(num_dispatches, 1, 1);
+            });
         }
 
         self.swap = !self.swap;
@@ -492,43 +482,28 @@ impl SpatialGridPipeline {
         let num_items_per_workgroup = 64;
         let num_dispatches = num_particles.div_ceil(num_items_per_workgroup) as u32;
 
-        gpu_profile!(
-            gpu_frame,
-            encoder,
-            "GPU Frame Time/Simulation/Grid key upload",
-            {
-                let mut pass = encoder.begin_compute_pass(&Default::default());
-                pass.set_pipeline(&self.upload);
-                pass.set_bind_group(0, uniforms, &[]);
-                pass.set_bind_group(1, particles, &[]);
-                pass.set_bind_group(2, spatial_grid, &[]);
-                pass.dispatch_workgroups(num_dispatches, 1, 1);
-            }
-        );
+        gpu_profile!(gpu_frame, encoder, "Grid key upload", {
+            let mut pass = encoder.begin_compute_pass(&Default::default());
+            pass.set_pipeline(&self.upload);
+            pass.set_bind_group(0, uniforms, &[]);
+            pass.set_bind_group(1, particles, &[]);
+            pass.set_bind_group(2, spatial_grid, &[]);
+            pass.dispatch_workgroups(num_dispatches, 1, 1);
+        });
 
-        gpu_profile!(
-            gpu_frame,
-            encoder,
-            "GPU Frame Time/Simulation/Radix sort",
-            {
-                sorter.sort(encoder, queue);
-            }
-        );
+        gpu_profile!(gpu_frame, encoder, "Radix sort", {
+            sorter.sort(encoder, queue);
+        });
 
-        gpu_profile!(
-            gpu_frame,
-            encoder,
-            "GPU Frame Time/Simulation/Grid start indices",
-            {
-                encoder.clear_buffer(start_indices, 0, None);
-                let mut pass = encoder.begin_compute_pass(&Default::default());
-                pass.set_pipeline(&self.start_indices);
-                pass.set_bind_group(0, uniforms, &[]);
-                pass.set_bind_group(1, particles, &[]);
-                pass.set_bind_group(2, spatial_grid, &[]);
-                pass.dispatch_workgroups(num_dispatches, 1, 1);
-            }
-        );
+        gpu_profile!(gpu_frame, encoder, "Grid start indices", {
+            encoder.clear_buffer(start_indices, 0, None);
+            let mut pass = encoder.begin_compute_pass(&Default::default());
+            pass.set_pipeline(&self.start_indices);
+            pass.set_bind_group(0, uniforms, &[]);
+            pass.set_bind_group(1, particles, &[]);
+            pass.set_bind_group(2, spatial_grid, &[]);
+            pass.dispatch_workgroups(num_dispatches, 1, 1);
+        });
     }
 }
 
@@ -573,12 +548,17 @@ pub struct Sim {
 
     config: SimConfig,
     num_particles: usize,
+    gpu_recorder: Option<GpuFrameRecorder>,
 }
 
 impl Sim {
     const LOOK_AHEAD_FACTOR: f32 = 1.0 / 120.0;
 
-    pub fn new(device: &wgpu::Device, config: &SimConfig) -> Self {
+    pub fn new(
+        device: &wgpu::Device,
+        config: &SimConfig,
+        gpu_recorder: Option<GpuFrameRecorder>,
+    ) -> Self {
         let shader = device.create_shader_module(wgpu::include_wgsl!("sph.wgsl"));
 
         let particles = Self::create_particles(config);
@@ -612,6 +592,7 @@ impl Sim {
             sorter,
             config: config.clone(),
             num_particles: config.num_particles as usize,
+            gpu_recorder,
         }
     }
 
@@ -660,12 +641,7 @@ impl Sim {
         queue.write_buffer(&self.resources.uniform, 0, bytemuck::bytes_of(&sim_uniform));
     }
 
-    pub fn dispatch(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        queue: &wgpu::Queue,
-        gpu_frame: Option<&GpuFrameRecorder>,
-    ) {
+    pub fn dispatch(&mut self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {
         let particles = if self.sph_pipeline.swap {
             &self.bind_groups.particle_bind_group_b
         } else {
@@ -681,7 +657,7 @@ impl Sim {
             &self.resources.start_indices,
             &self.sorter,
             self.num_particles,
-            gpu_frame,
+            self.gpu_recorder.as_ref(),
         );
 
         self.sph_pipeline.dispatch(
@@ -690,7 +666,7 @@ impl Sim {
             particles,
             &self.bind_groups.spatial_upload_bind_group,
             self.num_particles,
-            gpu_frame,
+            self.gpu_recorder.as_ref(),
         );
     }
 }

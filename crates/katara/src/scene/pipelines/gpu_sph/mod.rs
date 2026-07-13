@@ -19,8 +19,9 @@ impl Pipeline {
         surface_config: &wgpu::SurfaceConfiguration,
         bind_group_layout: &wgpu::BindGroupLayout,
         config: &Config,
+        gpu_recorder: Option<GpuFrameRecorder>,
     ) -> anyhow::Result<Self> {
-        let sim = Sim::new(device, &config.sim);
+        let sim = Sim::new(device, &config.sim, gpu_recorder);
 
         let renderer = BillboardRenderer::new(
             device,
@@ -47,13 +48,8 @@ impl Pipeline {
         self.renderer.reset(device, self.sim.vel_density_buffer());
     }
 
-    pub fn update_fixed(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        queue: &wgpu::Queue,
-        gpu_frame: Option<&GpuFrameRecorder>,
-    ) {
-        self.sim.dispatch(encoder, queue, gpu_frame);
+    pub fn update_fixed(&mut self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {
+        self.sim.dispatch(encoder, queue);
     }
 
     pub fn update_config(

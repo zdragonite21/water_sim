@@ -53,6 +53,7 @@ pub struct SceneStats {
 
 pub struct Scene {
     pipeline: ActivePipeline,
+    gpu_recorder: Option<GpuFrameRecorder>,
     paused: bool,
     accumulator: instant::Duration,
     fixed_dt: instant::Duration,
@@ -69,6 +70,7 @@ impl Scene {
         surface_config: &wgpu::SurfaceConfiguration,
         cam_bind_group_layout: &wgpu::BindGroupLayout,
         scene_config: &SceneConfig,
+        gpu_recorder: Option<GpuFrameRecorder>,
     ) -> anyhow::Result<Self> {
         let pipeline = ActivePipeline::new(
             device,
@@ -76,10 +78,12 @@ impl Scene {
             cam_bind_group_layout,
             scene_config.active_pipeline,
             &scene_config.pipeline_configs,
+            gpu_recorder.clone(),
         )?;
 
         Ok(Self {
             pipeline,
+            gpu_recorder,
             paused: true,
             accumulator: instant::Duration::ZERO,
             fixed_dt: instant::Duration::from_secs_f32(1.0 / Self::SIM_HZ as f32),
@@ -111,24 +115,14 @@ impl Scene {
         encoder: &mut wgpu::CommandEncoder,
         dt: instant::Duration,
         view_proj: &Matrix4<f32>,
-        gpu_frame: Option<&GpuFrameRecorder>,
     ) {
-        let mut simulation_started = false;
-        let mut simulation_span = None;
         if !self.paused {
             self.accumulator += dt;
 
             let mut steps = 0;
 
             while self.accumulator >= self.fixed_dt && steps < Self::MAX_STEPS {
-                profiling::scope!("Simulation step");
-                if !simulation_started {
-                    simulation_span = gpu_frame
-                        .map(|frame| frame.begin_query("GPU Frame Time/Simulation", encoder));
-                    simulation_started = true;
-                }
-                self.pipeline
-                    .update_fixed(encoder, queue, self.fixed_dt, gpu_frame);
+                self.pipeline.update_fixed(encoder, queue, self.fixed_dt);
                 self.accumulator -= self.fixed_dt;
                 steps += 1;
             }
@@ -138,19 +132,9 @@ impl Scene {
             }
         } else {
             for _ in 0..self.steps {
-                profiling::scope!("Simulation step");
-                if !simulation_started {
-                    simulation_span = gpu_frame
-                        .map(|frame| frame.begin_query("GPU Frame Time/Simulation", encoder));
-                    simulation_started = true;
-                }
-                self.pipeline
-                    .update_fixed(encoder, queue, self.fixed_dt, gpu_frame);
+                self.pipeline.update_fixed(encoder, queue, self.fixed_dt);
             }
             self.steps = 0;
-        }
-        if let (Some(frame), Some(span)) = (gpu_frame, simulation_span) {
-            frame.end_query(encoder, span);
         }
         self.upload_scene_data(queue, view_proj);
     }
@@ -181,6 +165,7 @@ impl Scene {
                 cam_bind_group_layout,
                 self.config.active_pipeline,
                 &self.config.pipeline_configs,
+                self.gpu_recorder.clone(),
             )?;
             self.paused = true;
             Ok(true)

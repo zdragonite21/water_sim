@@ -12,7 +12,7 @@ use crate::{
     camera::CameraRig,
     config::{AppConfig, WindowConfig},
     debug_watch,
-    profiling::{GpuFrameRecorder, Profiler, gpu_profile},
+    profiling::{Profiler, gpu_profile},
     scene::Scene,
 };
 use crate::{frame_clock::FrameClock, gui::Gui};
@@ -112,12 +112,14 @@ impl State {
             };
 
         let camera = CameraRig::new(&device, config.width, config.height, &app_config.camera);
+        let profiler = Profiler::new(&device, gpu_profiling_supported);
 
         let scene = Scene::new(
             &device,
             &config,
             &camera.bind_group_layout,
             &app_config.scene,
+            profiler.gpu_recorder(),
         )
         .await?;
         log::debug!("water scene created");
@@ -125,7 +127,6 @@ impl State {
         let frame_clock = FrameClock::new();
 
         let gui = Gui::new(&device, &queue, &window, surface_format);
-        let profiler = Profiler::new(&device, gpu_profiling_supported);
 
         Ok(Self {
             window,
@@ -323,33 +324,23 @@ impl State {
         return Ok((output, reconfigure_after_present, encoder));
     }
 
-    fn update(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        dt: instant::Duration,
-        gpu_frame: Option<&GpuFrameRecorder>,
-    ) {
+    fn update(&mut self, encoder: &mut wgpu::CommandEncoder, dt: instant::Duration) {
         self.camera.update(&self.queue, dt);
-        self.scene.update(
-            &self.queue,
-            encoder,
-            dt,
-            &self.camera.view_proj(),
-            gpu_frame,
-        );
+        self.scene
+            .update(&self.queue, encoder, dt, &self.camera.view_proj());
     }
 
     fn render(
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         output: &wgpu::SurfaceTexture,
-        gpu_frame: Option<&GpuFrameRecorder>,
     ) -> anyhow::Result<()> {
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let render_result = gpu_profile!(gpu_frame, encoder, "GPU Frame Time/Particle render", {
+        let gpu = self.profiler.gpu_recorder();
+        let render_result = gpu_profile!(gpu.as_ref(), encoder, "Particle render", {
             self.scene.render(encoder, &view, &self.camera.bind_group)
         });
         render_result?;
@@ -393,19 +384,19 @@ impl State {
     pub fn frame(&mut self) -> anyhow::Result<()> {
         self.frame_clock.tick();
         debug_watch::begin_frame(self.frame_clock.frame_index, self.scene.paused());
-        let gpu_frame = self.profiler.begin_frame(&self.device, &self.queue);
+        self.profiler.begin_frame(&self.device, &self.queue);
 
         let result = {
-            profiling::scope!("CPU Frame Time");
-            self.profiled_frame(gpu_frame)
+            profiling::scope!("Frame");
+            self.profiled_frame()
         };
         self.profiler.finish_cpu_frame();
         result
     }
 
-    fn profiled_frame(&mut self, gpu_frame: Option<GpuFrameRecorder>) -> anyhow::Result<()> {
-        {
-            profiling::scope!("Scene/config sync");
+    fn profiled_frame(&mut self) -> anyhow::Result<()> {
+        let (encoder, output, reconfigure_after_present, render_result) = {
+            profiling::scope!("Update and command encoding");
             if self.scene.sync_pipeline(
                 &self.device,
                 &self.queue,
@@ -414,25 +405,18 @@ impl State {
             )? {
                 self.reset_scene();
             }
-        }
 
-        let (output, reconfigure_after_present, mut encoder) = {
-            profiling::scope!("Surface acquisition");
-            self.begin_frame()?
+            let (output, reconfigure_after_present, mut encoder) = self.begin_frame()?;
+
+            let gpu = self.profiler.gpu_recorder();
+            let render_result = gpu_profile!(gpu.as_ref(), &mut encoder, "Frame", {
+                self.update(&mut encoder, self.frame_clock.dt);
+                self.render(&mut encoder, &output)
+            });
+            self.profiler.resolve_gpu_queries(&mut encoder);
+
+            (encoder, output, reconfigure_after_present, render_result)
         };
-
-        let render_result = gpu_profile!(gpu_frame.as_ref(), &mut encoder, "GPU Frame Time", {
-            {
-                profiling::scope!("Update encoding");
-                self.update(&mut encoder, self.frame_clock.dt, gpu_frame.as_ref());
-            }
-
-            {
-                profiling::scope!("Render and GUI encoding");
-                self.render(&mut encoder, &output, gpu_frame.as_ref())
-            }
-        });
-        self.profiler.resolve_gpu_queries(&mut encoder);
 
         {
             profiling::scope!("Submit and present");

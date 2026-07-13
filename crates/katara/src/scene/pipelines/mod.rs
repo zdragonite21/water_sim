@@ -38,6 +38,7 @@ impl ActivePipeline {
         cam_bind_group_layout: &wgpu::BindGroupLayout,
         pipeline_id: PipelineId,
         pipeline_configs: &PipelineConfigs,
+        gpu_recorder: Option<GpuFrameRecorder>,
     ) -> anyhow::Result<Self> {
         match pipeline_id {
             PipelineId::CpuSph => Ok(Self::CpuSph(cpu_sph::Pipeline::new(
@@ -51,6 +52,7 @@ impl ActivePipeline {
                 surface_config,
                 cam_bind_group_layout,
                 &pipeline_configs.gpu_sph,
+                gpu_recorder,
             )?)),
         }
     }
@@ -79,11 +81,10 @@ impl ActivePipeline {
         encoder: &mut wgpu::CommandEncoder,
         queue: &wgpu::Queue,
         dt: instant::Duration,
-        gpu_frame: Option<&GpuFrameRecorder>,
     ) {
         match self {
             Self::CpuSph(pipeline) => pipeline.update_fixed(dt),
-            Self::GpuSph(pipeline) => pipeline.update_fixed(encoder, queue, gpu_frame),
+            Self::GpuSph(pipeline) => pipeline.update_fixed(encoder, queue),
         }
     }
 
