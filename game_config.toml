@@ -51,11 +51,11 @@ size = [
     10.0,
     1.0,
 ]
-smoothing_radius = 0.30000001192092896
-target_density = 500.0
-pressure_multiplier = 1200.0
-viscosity_strength = 2.0
-mass = 1.0
+smoothing_radius = 0.10000000149011612
+target_density = 11.8100004196167
+pressure_multiplier = 148.60000610351563
+viscosity_strength = 0.5
+mass = 0.05000000074505806
 damping = 0.05000000074505806
 
 [scene.pipeline_configs.gpu_sph.render]
