@@ -28,7 +28,7 @@ impl Pipeline {
             surface_config,
             bind_group_layout,
             &config.render,
-            sim.velocity_buffer(),
+            sim.velocity_buffers(),
         )?;
 
         Ok(Self { sim, renderer })
@@ -45,7 +45,7 @@ impl Pipeline {
 
     pub fn reset(&mut self, device: &wgpu::Device) {
         self.sim.reset(device);
-        self.renderer.reset(device, self.sim.velocity_buffer());
+        self.renderer.reset(device, self.sim.velocity_buffers());
     }
 
     pub fn update_fixed(&mut self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {
@@ -85,6 +85,7 @@ impl Pipeline {
             self.sim.num_particles(),
             target_view,
             camera_bind_group,
+            self.sim.velocity_buffer_index(),
         )?;
         Ok(())
     }

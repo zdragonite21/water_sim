@@ -42,8 +42,9 @@ fn create_bind_group(
     label: &'static str,
     layout: &wgpu::BindGroupLayout,
     buffers: &[&wgpu::Buffer],
+    swap_vel: bool,
 ) -> wgpu::BindGroup {
-    let entries = buffers
+    let mut entries = buffers
         .iter()
         .enumerate()
         .map(|(binding, buffer)| wgpu::BindGroupEntry {
@@ -51,6 +52,17 @@ fn create_bind_group(
             resource: buffer.as_entire_binding(),
         })
         .collect::<Vec<_>>();
+
+    if swap_vel {
+        entries[2] = wgpu::BindGroupEntry {
+            binding: 2,
+            resource: buffers[3].as_entire_binding(),
+        };
+        entries[3] = wgpu::BindGroupEntry {
+            binding: 3,
+            resource: buffers[2].as_entire_binding(),
+        };
+    }
 
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some(label),
@@ -110,9 +122,10 @@ struct SimUniform {
     gravity: f32,
     smoothing_radius: f32,
     stiffness: f32,
+    viscosity_strength: f32,
     rest_density: f32,
     mass: f32,
-    _pad: [f32; 2],
+    _pad: [f32; 1],
 }
 
 impl SimUniform {
@@ -124,9 +137,10 @@ impl SimUniform {
             gravity: config.gravity,
             smoothing_radius: config.smoothing_radius,
             stiffness: config.pressure_multiplier,
+            viscosity_strength: config.viscosity_strength,
             rest_density: config.target_density,
             mass: config.mass,
-            _pad: [0.0; 2],
+            _pad: [0.0; 1],
         }
     }
 }
@@ -199,6 +213,7 @@ impl SimLayouts {
 struct SimBindGroups {
     uniform: wgpu::BindGroup,
     particles: wgpu::BindGroup,
+    particles_swapped: wgpu::BindGroup,
     spatial_grid: wgpu::BindGroup,
 }
 
@@ -215,18 +230,28 @@ impl SimBindGroups {
                 "sim uniforms",
                 &layouts.uniform_layout,
                 &[&resources.uniform],
+                false,
             ),
             particles: create_bind_group(
                 device,
                 "sim particles",
                 &layouts.particle_layout,
                 &resources.particles.iter().collect::<Vec<_>>(),
+                false,
+            ),
+            particles_swapped: create_bind_group(
+                device,
+                "sim particles swapped",
+                &layouts.particle_layout,
+                &resources.particles.iter().collect::<Vec<_>>(),
+                true,
             ),
             spatial_grid: create_bind_group(
                 device,
                 "spatial grid",
                 &layouts.spatial_upload_layout,
                 &[sorter.keys(), sorter.values(), &resources.intervals],
+                false,
             ),
         }
     }
@@ -419,6 +444,8 @@ pub struct Sim {
     config: SimConfig,
     num_particles: usize,
     gpu_recorder: Option<GpuFrameRecorder>,
+
+    swap: bool,
 }
 
 impl Sim {
@@ -458,6 +485,7 @@ impl Sim {
             config: config.clone(),
             num_particles: config.num_particles as usize,
             gpu_recorder,
+            swap: false,
         }
     }
 
@@ -507,11 +535,16 @@ impl Sim {
     }
 
     pub fn dispatch(&mut self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {
+        let particles = if self.swap {
+            &self.bind_groups.particles_swapped
+        } else {
+            &self.bind_groups.particles
+        };
         self.spatial_grid_pipeline.dispatch(
             encoder,
             queue,
             &self.bind_groups.uniform,
-            &self.bind_groups.particles,
+            particles,
             &self.bind_groups.spatial_grid,
             &self.resources.intervals,
             &self.sorter,
@@ -522,11 +555,12 @@ impl Sim {
         self.sph_pipeline.dispatch(
             encoder,
             &self.bind_groups.uniform,
-            &self.bind_groups.particles,
+            particles,
             &self.bind_groups.spatial_grid,
             self.num_particles,
             self.gpu_recorder.as_ref(),
         );
+        self.swap = !self.swap;
     }
 }
 
@@ -545,8 +579,14 @@ impl Sim {
         &self.resources.particles[0]
     }
 
-    pub fn velocity_buffer(&self) -> &wgpu::Buffer {
-        &self.resources.particles[2]
+    pub fn velocity_buffers(&self) -> [&wgpu::Buffer; 2] {
+        [&self.resources.particles[2], &self.resources.particles[3]]
+    }
+
+    pub fn velocity_buffer_index(&self) -> usize {
+        // `swap` has already been toggled after dispatch. The next input buffer
+        // is the opposite one from the velocity buffer just written.
+        if self.swap { 1 } else { 0 }
     }
 
     pub fn num_particles(&self) -> usize {

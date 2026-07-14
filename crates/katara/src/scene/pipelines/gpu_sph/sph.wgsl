@@ -5,6 +5,7 @@ struct SimConfig {
     gravity: f32,
     smoothing_radius: f32,
     stiffness: f32,
+    viscosity_strength: f32,
     rest_density: f32,
     mass: f32,
 };
@@ -68,6 +69,15 @@ fn smoothing_kernel_deriv(radius: f32, dst: f32) -> f32 {
     }
     var scale = 12.0 / (PI * pow(radius, 4.0));
     return (dst - radius) * scale;
+}
+
+fn viscosity_smoothing_kernel(radius: f32, dst: f32) -> f32 {
+    if dst >= radius {
+        return 0.0;
+    }
+    let volume = PI * pow(radius, 8.0) / 4.0;
+    let value = max(radius * radius - dst * dst, 0.0);
+    return value * value * value / volume;
 }
 
 fn density_to_pressure(density: f32) -> f32 {
@@ -252,7 +262,8 @@ fn pressure_viscosity(
     // buffers
     let r_pos_density = &buff_b;
     let w_pos_density = &buff_a;
-    let rw_vel = &buff_c;
+    let r_vel = &buff_c;
+    let w_vel = &buff_d;
 
     // setup
     var len = arrayLength(r_pos_density);
@@ -265,12 +276,14 @@ fn pressure_viscosity(
     var pos_density  = (*r_pos_density)[index];
     var predicted = pos_density.xyz;
     var density = pos_density.w;
+    var vel = (*r_vel)[index].xyz;
 
     // compute pressure force
     var cell = position_to_cell(predicted);
     var sq_radius = config.smoothing_radius * config.smoothing_radius;
 
-    var pressure_force: vec3<f32> = vec3<f32>(0.0, 0.0, 0.0);
+    var pressure_force = vec3<f32>(0.0, 0.0, 0.0);
+    var viscosity = vec3<f32>(0.0, 0.0, 0.0);
     var pressure = density_to_pressure(density);
     for (var i = 0u; i < 9; i++) {
         var offset = CELL_OFFSETS[i];
@@ -318,26 +331,34 @@ fn pressure_viscosity(
 
                 // shared pressure + neighbor density
                 var other_pressure = density_to_pressure(other_density);
-                var shared_pressure = (pressure + other_pressure) / 2.0;
-
+                var shared_pressure = (pressure + other_pressure) * 0.5;
+                
                 pressure_force += shared_pressure * dir * slope * config.mass / max(other_density, EPSILON);
+
+                // compute viscosity force
+                var other_vel = (*r_vel)[other_idx].xyz;
+                var influence = viscosity_smoothing_kernel(config.smoothing_radius, dst);
+                var vel_diff = other_vel - vel;
+
+                viscosity += vel_diff * influence;
             }
         }
     }
 
-    // apply pressure force
-    let pressure_accel = pressure_force / max(density, EPSILON);
-    var vel = (*rw_vel)[index].xyz;
+    // apply pressure and viscosity force
+    let div = 1.0 / max(density, EPSILON);
+    let pressure_accel = pressure_force * div;
+    let viscosity_accel = viscosity * config.viscosity_strength * div;
 
     // integrate velocity
     var pos = predicted - vel * LOOK_AHEAD_FACTOR;
 
-    vel += pressure_accel * config.dt;
+    vel += (pressure_accel + viscosity_accel) * config.dt;
     pos += vel * config.dt;
 
     // store ssbo
     (*w_pos_density)[index] = vec4<f32>(pos, density);
-    (*rw_vel)[index] = vec4<f32>(vel, 0.0);
+    (*w_vel)[index] = vec4<f32>(vel, 0.0);
 }
 
 @compute
@@ -347,7 +368,7 @@ fn handle_collisions(
 ) {
     // buffers
     let rw_pos_density = &buff_a;
-    let rw_vel = &buff_c;
+    let rw_vel = &buff_d;
 
     // setup
     var len = arrayLength(rw_pos_density);
@@ -364,7 +385,7 @@ fn handle_collisions(
     var vel = (*rw_vel)[index].xyz;
 
     // handle collisions
-    var half_bound_size = config.size / 2.0;
+    var half_bound_size = config.size * 0.5;
     var damping = config.collision_damping;
     var collided = abs(pos) > half_bound_size;
     pos = select(pos, sign(pos) * half_bound_size, collided);

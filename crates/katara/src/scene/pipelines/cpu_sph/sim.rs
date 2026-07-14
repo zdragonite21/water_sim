@@ -157,8 +157,7 @@ impl Sim {
             );
             let density = self.particles[i].density.max(f32::EPSILON);
             let pressure_accel = pressure_force / density;
-            // todo: add back viscosity accel
-            let viscosity_accel = viscosity_force / density * 0.0;
+            let viscosity_accel = viscosity_force / density;
             self.particles[i].vel += (pressure_accel + viscosity_accel) * dt;
         }
     }

@@ -41,7 +41,7 @@ pub struct BillboardRenderer {
     water_uniform: WaterUniform,
     water_uniform_buffer: wgpu::Buffer,
     water_bind_group: wgpu::BindGroup,
-    sim_bind_group: wgpu::BindGroup,
+    sim_bind_groups: [wgpu::BindGroup; 2],
     config: RenderConfig,
 }
 
@@ -51,7 +51,7 @@ impl BillboardRenderer {
         config: &wgpu::SurfaceConfiguration,
         camera_layout: &wgpu::BindGroupLayout,
         render_config: &RenderConfig,
-        velocity_buffer: &wgpu::Buffer,
+        velocity_buffers: [&wgpu::Buffer; 2],
     ) -> anyhow::Result<Self> {
         let shader = device.create_shader_module(wgpu::include_wgsl!("water.wgsl"));
 
@@ -105,13 +105,15 @@ impl BillboardRenderer {
                 }],
             });
 
-        let sim_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("sim_bind_group"),
-            layout: &sim_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: velocity_buffer.as_entire_binding(),
-            }],
+        let sim_bind_groups = velocity_buffers.map(|velocity_buffer| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("sim_bind_group"),
+                layout: &sim_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: velocity_buffer.as_entire_binding(),
+                }],
+            })
         });
 
         let render_pipeline_layout =
@@ -180,7 +182,7 @@ impl BillboardRenderer {
             water_uniform,
             water_uniform_buffer,
             water_bind_group,
-            sim_bind_group,
+            sim_bind_groups,
             config: render_config.clone(),
         })
     }
@@ -190,7 +192,7 @@ impl BillboardRenderer {
         log::debug!("depth texture rebuilt {}x{}", config.width, config.height);
     }
 
-    pub fn reset(&mut self, device: &wgpu::Device, velocity_buffer: &wgpu::Buffer) {
+    pub fn reset(&mut self, device: &wgpu::Device, velocity_buffers: [&wgpu::Buffer; 2]) {
         let sim_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("sim_bind_group_layout"),
@@ -206,15 +208,16 @@ impl BillboardRenderer {
                 }],
             });
 
-        let sim_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("sim_bind_group"),
-            layout: &sim_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: velocity_buffer.as_entire_binding(),
-            }],
+        self.sim_bind_groups = velocity_buffers.map(|velocity_buffer| {
+            device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("sim_bind_group"),
+                layout: &sim_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: velocity_buffer.as_entire_binding(),
+                }],
+            })
         });
-        self.sim_bind_group = sim_bind_group;
     }
 
     pub fn update_config(&mut self, config: &RenderConfig) {
@@ -241,6 +244,7 @@ impl BillboardRenderer {
         num_instances: usize,
         target_view: &wgpu::TextureView,
         camera_bind_group: &wgpu::BindGroup,
+        velocity_buffer_index: usize,
     ) -> anyhow::Result<()> {
         // draw only; no physics decisions
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -274,7 +278,7 @@ impl BillboardRenderer {
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, camera_bind_group, &[]);
         render_pass.set_bind_group(1, &self.water_bind_group, &[]);
-        render_pass.set_bind_group(2, &self.sim_bind_group, &[]);
+        render_pass.set_bind_group(2, &self.sim_bind_groups[velocity_buffer_index], &[]);
         render_pass.set_vertex_buffer(0, self.particle_display.vertex_buffer.slice(..));
         render_pass.set_index_buffer(
             self.particle_display.index_buffer.slice(..),
