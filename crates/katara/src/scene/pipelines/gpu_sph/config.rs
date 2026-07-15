@@ -5,7 +5,7 @@ inspect_config! {
     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
     #[serde(default)]
     pub struct RenderConfig {
-        slider particle_size: f32 = 1.0, 0.05, 5.0;
+        slider particle_size: f32 = 0.1, 0.001, 1.0;
     }
 }
 

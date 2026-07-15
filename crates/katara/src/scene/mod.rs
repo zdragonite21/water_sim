@@ -62,8 +62,8 @@ pub struct Scene {
 }
 
 impl Scene {
-    const SIM_HZ: u64 = 240;
-    const MAX_STEPS: u8 = 32;
+    const SIM_HZ: u64 = 120;
+    const MAX_STEPS: u8 = 8;
 
     pub async fn new(
         device: &wgpu::Device,

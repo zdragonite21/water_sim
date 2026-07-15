@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use std::f32::consts::PI;
 use std::num::NonZeroU32;
 
 use super::config::SimConfig;
@@ -91,7 +92,10 @@ debug_stats! {
     #[derive(Debug, Clone)]
     #[allow(dead_code)]
     pub struct Stats {
-        particle_count: usize = 0;
+        stat particle_count: usize = 0;
+        stat exp_density: f32 = 0.0;
+        stat exp_neighbor_count: f32 = 0.0;
+        stat exp_particles_per_cell: f32 = 0.0;
     }
 }
 
@@ -449,8 +453,6 @@ pub struct Sim {
 }
 
 impl Sim {
-    const LOOK_AHEAD_FACTOR: f32 = 1.0 / 120.0;
-
     pub fn new(
         device: &wgpu::Device,
         config: &SimConfig,
@@ -566,8 +568,22 @@ impl Sim {
 
 impl Sim {
     pub fn get_stats(&self) -> Stats {
+        let particle_count = self.num_particles;
+        let volume = self.config.size[0] * self.config.size[1] * self.config.size[2];
+        let exp_density = particle_count as f32 * self.config.mass / volume;
+        let exp_neighbor_count =
+            PI * self.config.smoothing_radius.powi(2) * particle_count as f32 / volume;
+
+        let num_cells = (self.config.size[0] / self.config.smoothing_radius).ceil()
+            * (self.config.size[1] / self.config.smoothing_radius).ceil()
+            * (self.config.size[2] / self.config.smoothing_radius).ceil();
+        let exp_particles_per_cell = particle_count as f32 / num_cells;
+
         Stats {
-            particle_count: self.num_particles,
+            particle_count,
+            exp_density,
+            exp_neighbor_count,
+            exp_particles_per_cell,
         }
     }
 

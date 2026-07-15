@@ -87,6 +87,7 @@ impl Pipeline {
             camera_bind_group,
             self.sim.velocity_buffer_index(),
         )?;
+
         Ok(())
     }
 }
