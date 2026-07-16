@@ -4,13 +4,17 @@ struct SimConfig {
     dt: f32,
     gravity: f32,
     smoothing_radius: f32,
+    inv_smoothing_radius: f32,
     stiffness: f32,
     viscosity_strength: f32,
     rest_density: f32,
     mass: f32,
+    inv_density_kernel_volume: f32,
+    density_kernel_scale: f32,
+    inv_viscosity_kernel_volume: f32,
 };
 
-    struct Interval {
+struct Interval {
     start_idx: u32,
     end_idx: u32,
 }
@@ -30,7 +34,7 @@ struct SimConfig {
 @group(2) @binding(2) var<storage, read_write> intervals: array<Interval>;
 
 fn position_to_cell(pos: vec3<f32>) -> vec3<i32> {
-    return vec3<i32>(floor(pos / config.smoothing_radius));
+    return vec3<i32>(floor(pos * config.inv_smoothing_radius));
 }
 
 fn hash_cell(cell: vec3<i32>) -> u32 {
@@ -54,30 +58,30 @@ fn apply_gravity(vel: vec3<f32>) -> vec3<f32> {
     return vel + -vec3<f32>(0.0, 1.0, 0.0) * config.gravity * config.dt;
 }
 
-fn smoothing_kernel(radius: f32, dst: f32) -> f32 {
+fn smoothing_kernel(dst: f32) -> f32 {
+    let radius = config.smoothing_radius;
     if dst >= radius {
         return 0.0;
     }
-    var volume = PI * pow(radius, 4.0) / 6.0;
     var off = radius - dst;
-    return off * off / volume;
+    return off * off * config.inv_density_kernel_volume;
 }
 
-fn smoothing_kernel_deriv(radius: f32, dst: f32) -> f32 {
+fn smoothing_kernel_deriv(dst: f32) -> f32 {
+    let radius = config.smoothing_radius;
     if dst >= radius {
         return 0.0;
     }
-    var scale = 12.0 / (PI * pow(radius, 4.0));
-    return (dst - radius) * scale;
+    return (dst - radius) * config.density_kernel_scale;
 }
 
-fn viscosity_smoothing_kernel(radius: f32, dst: f32) -> f32 {
+fn viscosity_smoothing_kernel(dst: f32) -> f32 {
+    let radius = config.smoothing_radius;
     if dst >= radius {
         return 0.0;
     }
-    let volume = PI * pow(radius, 8.0) / 4.0;
     let value = max(radius * radius - dst * dst, 0.0);
-    return value * value * value / volume;
+    return value * value * value * config.inv_viscosity_kernel_volume;
 }
 
 fn density_to_pressure(density: f32) -> f32 {
@@ -127,7 +131,7 @@ fn upload_keys(
     var key = get_key(cell, len);
     keys[index] = key;
     indices[index] = index;
-    (*w_pos)[index]  = vec4<f32>(predicted, 0.0);
+    (*w_pos)[index] = vec4<f32>(predicted, 0.0);
     (*w_vel)[index] = vec4<f32>(vel, 0.0);
 }
 
@@ -243,7 +247,7 @@ fn compute_density(
             var sq_dst = dot(offset, offset);
             if sq_dst < sq_radius {
                 var dst = sqrt(sq_dst);
-                var influence = smoothing_kernel(config.smoothing_radius, dst);
+                var influence = smoothing_kernel(dst);
                 density += config.mass * influence;
             }
         }
@@ -273,7 +277,7 @@ fn pressure_viscosity(
         return;
     }
 
-    var pos_density  = (*r_pos_density)[index];
+    var pos_density = (*r_pos_density)[index];
     var predicted = pos_density.xyz;
     var density = pos_density.w;
     var vel = (*r_vel)[index].xyz;
@@ -301,6 +305,7 @@ fn pressure_viscosity(
             var other_predicted_density = (*r_pos_density)[other_idx];
             var other_predicted = other_predicted_density.xyz;
             var other_density = other_predicted_density.w;
+            var other_vel = (*r_vel)[other_idx].xyz;
 
             var other_cell = position_to_cell(other_predicted);
             if any(other_cell != curr_cell) {
@@ -314,7 +319,7 @@ fn pressure_viscosity(
                     continue;
                 }
                 var dst = sqrt(sq_dst);
-                var slope: f32 = smoothing_kernel_deriv(config.smoothing_radius, dst);
+                var slope = smoothing_kernel_deriv(dst);
 
                 // handle dst = 0.0 case (move in random non degeneerate dir)
                 var dir: vec3<f32>;
@@ -332,12 +337,11 @@ fn pressure_viscosity(
                 // shared pressure + neighbor density
                 var other_pressure = density_to_pressure(other_density);
                 var shared_pressure = (pressure + other_pressure) * 0.5;
-                
+
                 pressure_force += shared_pressure * dir * slope * config.mass / max(other_density, EPSILON);
 
                 // compute viscosity force
-                var other_vel = (*r_vel)[other_idx].xyz;
-                var influence = viscosity_smoothing_kernel(config.smoothing_radius, dst);
+                var influence = viscosity_smoothing_kernel(dst);
                 var vel_diff = other_vel - vel;
 
                 viscosity += vel_diff * influence;

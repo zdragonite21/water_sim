@@ -125,25 +125,35 @@ struct SimUniform {
     dt: f32,
     gravity: f32,
     smoothing_radius: f32,
+    inv_smoothing_radius: f32,
     stiffness: f32,
     viscosity_strength: f32,
     rest_density: f32,
     mass: f32,
+    inv_density_kernel_volume: f32,
+    density_kernel_scale: f32,
+    inv_viscosity_kernel_volume: f32,
     _pad: [f32; 1],
 }
 
 impl SimUniform {
     pub fn new(config: &SimConfig, dt: f32) -> Self {
+        let radius = config.smoothing_radius;
+
         Self {
             size: config.size,
             collision_damping: config.damping,
             dt,
             gravity: config.gravity,
             smoothing_radius: config.smoothing_radius,
+            inv_smoothing_radius: 1.0 / config.smoothing_radius,
             stiffness: config.pressure_multiplier,
             viscosity_strength: config.viscosity_strength,
             rest_density: config.target_density,
             mass: config.mass,
+            inv_density_kernel_volume: 1.0 / (PI * radius.powf(4.0) / 6.0),
+            density_kernel_scale: 12.0 / (PI * radius.powf(4.0)),
+            inv_viscosity_kernel_volume: 1.0 / (PI * radius.powf(8.0) / 4.0),
             _pad: [0.0; 1],
         }
     }
