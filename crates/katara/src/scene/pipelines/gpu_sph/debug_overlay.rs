@@ -115,7 +115,7 @@ impl DebugOverlay {
             encoder,
             target_view,
             (!self.config.xray).then_some(depth_texture_view),
-            camera_bind_group,  
+            camera_bind_group,
         )
     }
 
@@ -149,24 +149,35 @@ impl DebugOverlay {
             return;
         };
 
-        for cell_x in grid.x_axis.iter_cells() {
-            let x = cell_x as f32 * radius;
-            self.line_batch.push_segment(
-                Point3::new(x, grid.y_axis.min_world(), 0.0),
-                Point3::new(x, grid.y_axis.max_world(), 0.0),
-                GRID_COLOR,
-                GRID_WIDTH,
-            );
+        let x_min = grid.x_axis.min_world();
+        let x_max = grid.x_axis.max_world();
+        let y_min = grid.y_axis.min_world();
+        let y_max = grid.y_axis.max_world();
+        let z_min = grid.z_axis.min_world();
+        let z_max = grid.z_axis.max_world();
+
+        // Lines parallel to X
+        for y in grid.y_axis.iter_world() {
+            for z in grid.z_axis.iter_world() {
+                self.line_batch
+                    .push_segment((x_min, y, z), (x_max, y, z), GRID_COLOR, GRID_WIDTH);
+            }
         }
 
-        for cell_y in grid.y_axis.iter_cells() {
-            let y = cell_y as f32 * radius;
-            self.line_batch.push_segment(
-                Point3::new(grid.x_axis.min_world(), y, 0.0),
-                Point3::new(grid.x_axis.max_world(), y, 0.0),
-                GRID_COLOR,
-                GRID_WIDTH,
-            );
+        // Lines parallel to Y
+        for x in grid.x_axis.iter_world() {
+            for z in grid.z_axis.iter_world() {
+                self.line_batch
+                    .push_segment((x, y_min, z), (x, y_max, z), GRID_COLOR, GRID_WIDTH);
+            }
+        }
+
+        // Lines parallel to Z
+        for x in grid.x_axis.iter_world() {
+            for y in grid.y_axis.iter_world() {
+                self.line_batch
+                    .push_segment((x, y, z_min), (x, y, z_max), GRID_COLOR, GRID_WIDTH);
+            }
         }
     }
 
@@ -203,7 +214,10 @@ impl SpatialGridOverlay {
     }
 
     fn count(&self) -> usize {
-        self.x_axis.raw_count() + self.y_axis.raw_count() + self.z_axis.raw_count()
+        let nx = self.x_axis.raw_count();
+        let ny = self.y_axis.raw_count();
+        let nz = self.z_axis.raw_count();
+        ny * nz + nx * nz + nx * ny
     }
 }
 
@@ -231,8 +245,8 @@ impl GridAxis {
         (self.end_cell - self.start_cell + 1).max(0) as usize
     }
 
-    fn iter_cells(&self) -> impl Iterator<Item = i32> + '_ {
-        self.start_cell..=self.end_cell
+    fn iter_world(&self) -> impl Iterator<Item = f32> + '_ {
+        (self.start_cell..=self.end_cell).map(|cell| cell as f32 * self.radius)
     }
 
     fn min_world(&self) -> f32 {

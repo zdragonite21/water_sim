@@ -52,11 +52,14 @@ impl LineBatch {
 
     pub fn push_segment(
         &mut self,
-        start: Point3<f32>,
-        end: Point3<f32>,
+        start: impl Into<Point3<f32>>,
+        end: impl Into<Point3<f32>>,
         color: [f32; 4],
         width_px: f32,
     ) {
+        let start = start.into();
+        let end = end.into();
+        
         if (end - start).magnitude2() <= f32::EPSILON {
             return;
         }

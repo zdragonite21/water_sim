@@ -63,7 +63,7 @@ particle_size = 0.09799999743700027
 
 [scene.pipeline_configs.gpu_sph.debug]
 enabled = true
-xray = true
+xray = false
 velocity = false
 bounds = true
 grid = true
