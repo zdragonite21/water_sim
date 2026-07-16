@@ -1,5 +1,8 @@
 use crate::{
-    render::model::{Mesh, SimpleVertex, Vertex},
+    render::{
+        model::{Mesh, SimpleVertex, Vertex},
+        texture::Texture,
+    },
     scene::debug::line::Line3d,
 };
 use cgmath::{Matrix4, Point3, Transform};
@@ -7,6 +10,7 @@ use wgpu::util::DeviceExt;
 
 pub struct LineRenderer {
     render_pipeline: wgpu::RenderPipeline,
+    render_pipeline_depth: wgpu::RenderPipeline,
     instance_buffer: wgpu::Buffer,
     line_uniform: LineUniform,
     line_uniform_buffer: wgpu::Buffer,
@@ -63,6 +67,51 @@ impl LineRenderer {
                 immediate_size: 0,
             });
 
+        let render_pipeline_depth =
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Line Renderer Pipeline"),
+                layout: Some(&render_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("vs_main"),
+                    buffers: &[SimpleVertex::desc(), LineInstanceRaw::desc()],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_main"),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: config.format,
+                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: None,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: Texture::DEPTH_FORMAT,
+                    depth_write_enabled: Some(false),
+                    depth_compare: Some(wgpu::CompareFunction::Less),
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview_mask: None,
+                cache: None,
+            });
+
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Line Renderer Pipeline"),
             layout: Some(&render_pipeline_layout),
@@ -109,6 +158,7 @@ impl LineRenderer {
 
         Ok(Self {
             render_pipeline,
+            render_pipeline_depth,
             instance_buffer,
             line_uniform,
             line_uniform_buffer,
@@ -212,6 +262,7 @@ impl LineRenderer {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         target_view: &wgpu::TextureView,
+        depth_texture_view: Option<&wgpu::TextureView>,
         camera_bind_group: &wgpu::BindGroup,
     ) -> anyhow::Result<()> {
         if self.visible_line_count == 0 {
@@ -229,10 +280,24 @@ impl LineRenderer {
                     store: wgpu::StoreOp::Store,
                 },
             })],
+            depth_stencil_attachment: depth_texture_view.map(|view| {
+                wgpu::RenderPassDepthStencilAttachment {
+                    view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Discard,
+                    }),
+                    stencil_ops: None,
+                }
+            }),
             ..Default::default()
         });
 
-        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_pipeline(if depth_texture_view.is_some() {
+            &self.render_pipeline_depth
+        } else {
+            &self.render_pipeline
+        });
         render_pass.set_bind_group(0, camera_bind_group, &[]);
         render_pass.set_bind_group(1, &self.line_bind_group, &[]);
         render_pass.set_vertex_buffer(0, self.quad.vertex_buffer.slice(..));
@@ -273,16 +338,15 @@ impl LineUniform {
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct LineInstanceRaw {
-    start: [f32; 2],
-    end: [f32; 2],
+    start: [f32; 3],
+    end: [f32; 3],
     color: [f32; 4],
     width_px: f32,
-    _pad: [f32; 3],
 }
 
 impl LineInstanceRaw {
     const ATTRIBS: [wgpu::VertexAttribute; 4] =
-        wgpu::vertex_attr_array![5 => Float32x2, 6 => Float32x2, 7 => Float32x4, 8 => Float32];
+        wgpu::vertex_attr_array![5 => Float32x3, 6 => Float32x3, 7 => Float32x4, 8 => Float32];
 
     fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
@@ -294,11 +358,10 @@ impl LineInstanceRaw {
 
     fn from_line(line: &Line3d) -> Self {
         Self {
-            start: [line.start.x, line.start.y],
-            end: [line.end.x, line.end.y],
+            start: line.start.into(),
+            end: line.end.into(),
             color: line.color,
             width_px: line.width_px,
-            _pad: [0.0; 3],
         }
     }
 }

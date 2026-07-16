@@ -114,7 +114,7 @@ impl DebugOverlay {
         camera_bind_group: &wgpu::BindGroup,
     ) -> anyhow::Result<()> {
         self.line_renderer
-            .draw(encoder, target_view, camera_bind_group)
+            .draw(encoder, target_view, None, camera_bind_group)
     }
 
     pub fn update_config(&mut self, config: &DebugConfig) {

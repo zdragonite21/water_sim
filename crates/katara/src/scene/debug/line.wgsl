@@ -14,8 +14,8 @@ struct LineUniform {
 var<uniform> line_config: LineUniform;
 
 struct InstanceInput {
-    @location(5) start: vec2<f32>,
-    @location(6) end: vec2<f32>,
+    @location(5) start: vec3<f32>,
+    @location(6) end: vec3<f32>,
     @location(7) color: vec4<f32>,
     @location(8) width_px: f32,
 };
@@ -34,8 +34,8 @@ struct VertexOutput {
 fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
     var out: VertexOutput;
 
-    let start_px = (instance.start * 0.5 + vec2<f32>(0.5)) * line_config.viewport_size;
-    let end_px = (instance.end * 0.5 + vec2<f32>(0.5)) * line_config.viewport_size;
+    let start_px = (instance.start.xy * 0.5 + vec2<f32>(0.5)) * line_config.viewport_size;
+    let end_px = (instance.end.xy * 0.5 + vec2<f32>(0.5)) * line_config.viewport_size;
 
     let delta = end_px - start_px;
     var dir = vec2<f32>(1.0, 0.0);
@@ -55,7 +55,8 @@ fn vs_main(in: VertexInput, instance: InstanceInput) -> VertexOutput {
         + normal * in.position.y * width;
     let pos = pos_px / line_config.viewport_size * 2.0 - vec2<f32>(1.0);
 
-    out.clip_position = vec4<f32>(pos, 0.0, 1.0);
+    let depth = mix(instance.start.z, instance.end.z, in.uv.x);
+    out.clip_position = vec4(pos, depth, 1.0);
     out.color = instance.color;
     return out;
 }

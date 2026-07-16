@@ -116,8 +116,12 @@ impl Pipeline {
             self.sim.velocity_buffer_index(),
         )?;
 
-        self.debug_overlay
-            .draw(encoder, target_view, camera_bind_group)?;
+        self.debug_overlay.draw(
+            encoder,
+            target_view,
+            self.renderer.depth_texture_view(),
+            camera_bind_group,
+        )?;
 
         Ok(())
     }

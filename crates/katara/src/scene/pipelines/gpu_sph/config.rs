@@ -14,6 +14,7 @@ inspect_config! {
     #[serde(default)]
     pub struct DebugConfig {
         checkbox enabled: bool = true;
+        checkbox xray: bool = false;
         checkbox velocity: bool = true;
         checkbox bounds: bool = true;
         checkbox grid: bool = true;

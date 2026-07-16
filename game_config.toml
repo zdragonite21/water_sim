@@ -47,7 +47,7 @@ velocity_color = [
 gravity = 9.0
 num_particles = 100000
 size = [
-    19.0,
+    15.0,
     10.0,
     10.0,
 ]
@@ -62,10 +62,11 @@ damping = 0.05000000074505806
 particle_size = 0.09799999743700027
 
 [scene.pipeline_configs.gpu_sph.debug]
-enabled = false
+enabled = true
+xray = true
 velocity = false
-bounds = false
-grid = false
+bounds = true
+grid = true
 vector_width = 1.3070000410079956
 vector_scale = 0.1599999964237213
 velocity_color = [

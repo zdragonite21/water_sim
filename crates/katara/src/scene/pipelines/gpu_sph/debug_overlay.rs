@@ -108,10 +108,15 @@ impl DebugOverlay {
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         target_view: &wgpu::TextureView,
+        depth_texture_view: &wgpu::TextureView,
         camera_bind_group: &wgpu::BindGroup,
     ) -> anyhow::Result<()> {
-        self.line_renderer
-            .draw(encoder, target_view, camera_bind_group)
+        self.line_renderer.draw(
+            encoder,
+            target_view,
+            (!self.config.xray).then_some(depth_texture_view),
+            camera_bind_group,  
+        )
     }
 
     pub fn update_config(&mut self, config: &DebugConfig) {

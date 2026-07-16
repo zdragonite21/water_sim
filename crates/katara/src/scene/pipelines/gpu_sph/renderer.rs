@@ -294,4 +294,8 @@ impl BillboardRenderer {
 
         Ok(())
     }
+
+    pub fn depth_texture_view(&self) -> &wgpu::TextureView {
+        &self.depth_texture.view
+    }
 }
