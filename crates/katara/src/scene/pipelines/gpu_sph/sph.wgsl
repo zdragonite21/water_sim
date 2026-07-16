@@ -54,6 +54,34 @@ fn get_key(cell: vec3<i32>, length: u32) -> u32 {
     return hash % length;
 }
 
+fn hash_u32(x_in: u32) -> u32 {
+    var x = x_in;
+    x ^= x >> 16u;
+    x *= 0x7feb352du;
+    x ^= x >> 15u;
+    x *= 0x846ca68bu;
+    x ^= x >> 16u;
+    return x;
+}
+
+fn random_f32(seed: u32) -> f32 {
+    // Uses 24 bits, matching roughly the precision available in f32.
+    return f32(hash_u32(seed) >> 8u) * (1.0 / 16777216.0);
+}
+
+fn random_vec3(seed: u32) -> vec3<f32> {
+    return vec3<f32>(
+        random_f32(seed),
+        random_f32(seed ^ 0x9e3779b9u),
+        random_f32(seed ^ 0x85ebca6bu),
+    );
+}
+
+fn random_unit_vec3_fast(seed: u32) -> vec3<f32> {
+    let v = random_vec3(seed) * 2.0 - 1.0;
+    return v * inverseSqrt(max(dot(v, v), 1e-12));
+}
+
 fn apply_gravity(vel: vec3<f32>) -> vec3<f32> {
     return vel + -vec3<f32>(0.0, 1.0, 0.0) * config.gravity * config.dt;
 }
@@ -88,12 +116,6 @@ fn density_to_pressure(density: f32) -> f32 {
     var density_error = density - config.rest_density;
     return config.stiffness * density_error;
 }
-
-const CELL_OFFSETS: array<vec2<i32>, 9> = array(
-    vec2(-1, -1), vec2(0, -1), vec2(1, -1),
-    vec2(-1, 0), vec2(0, 0), vec2(1, 0),
-    vec2(-1, 1), vec2(0, 1), vec2(1, 1),
-);
 
 const PI: f32 = 3.14159265359;
 const MAX_U32: u32 = 0xffffffffu;
@@ -224,31 +246,35 @@ fn compute_density(
     var sq_radius = config.smoothing_radius * config.smoothing_radius;
 
     var density = 0.0;
-    for (var i = 0u; i < 9; i++) {
-        var offset = CELL_OFFSETS[i];
-        var curr_cell = cell + vec3<i32>(offset.x, offset.y, 0);
-        var key = get_key(curr_cell, len);
-        var ivl = intervals[key];
-        if ivl.start_idx == 0u {
-            continue;
-        }
+    for (var z = -1; z <= 1; z++) {
+        for (var y = -1; y <= 1; y++) {
+            for (var x = -1; x <= 1; x++) {
+                var offset = vec3<i32>(x, y, z);
+                var curr_cell = cell + offset;
+                var key = get_key(curr_cell, len);
+                var ivl = intervals[key];
+                if ivl.start_idx == 0u {
+                    continue;
+                }
 
-        var start_idx = ivl.start_idx - 1u;
-        var end_idx = ivl.end_idx - 1u;
+                var start_idx = ivl.start_idx - 1u;
+                var end_idx = ivl.end_idx - 1u;
 
-        for (var other_idx = start_idx; other_idx < end_idx; other_idx++) {
-            var other_predicted = (*r_pos)[other_idx].xyz;
-            var other_cell = position_to_cell(other_predicted);
-            if any(other_cell != curr_cell) {
-                continue;
-            }
+                for (var other_idx = start_idx; other_idx < end_idx; other_idx++) {
+                    var other_predicted = (*r_pos)[other_idx].xyz;
+                    var other_cell = position_to_cell(other_predicted);
+                    if any(other_cell != curr_cell) {
+                        continue;
+                    }
 
-            var offset = other_predicted - predicted;
-            var sq_dst = dot(offset, offset);
-            if sq_dst < sq_radius {
-                var dst = sqrt(sq_dst);
-                var influence = smoothing_kernel(dst);
-                density += config.mass * influence;
+                    var offset = other_predicted - predicted;
+                    var sq_dst = dot(offset, offset);
+                    if sq_dst < sq_radius {
+                        var dst = sqrt(sq_dst);
+                        var influence = smoothing_kernel(dst);
+                        density += config.mass * influence;
+                    }
+                }
             }
         }
     }
@@ -289,62 +315,62 @@ fn pressure_viscosity(
     var pressure_force = vec3<f32>(0.0, 0.0, 0.0);
     var viscosity = vec3<f32>(0.0, 0.0, 0.0);
     var pressure = density_to_pressure(density);
-    for (var i = 0u; i < 9; i++) {
-        var offset = CELL_OFFSETS[i];
-        var curr_cell = cell + vec3<i32>(offset.x, offset.y, 0);
-        var key = get_key(curr_cell, len);
-        var ivl = intervals[key];
-        if ivl.start_idx == 0u {
-            continue;
-        }
 
-        var start_idx = ivl.start_idx - 1u;
-        var end_idx = ivl.end_idx - 1u;
-
-        for (var other_idx = start_idx; other_idx < end_idx; other_idx++) {
-            var other_predicted_density = (*r_pos_density)[other_idx];
-            var other_predicted = other_predicted_density.xyz;
-            var other_density = other_predicted_density.w;
-            var other_vel = (*r_vel)[other_idx].xyz;
-
-            var other_cell = position_to_cell(other_predicted);
-            if any(other_cell != curr_cell) {
-                continue;
-            }
-
-            var offset = other_predicted - predicted;
-            var sq_dst = dot(offset, offset);
-            if sq_dst < sq_radius {
-                if other_idx == index {
+    for (var z = -1; z <= 1; z++) {
+        for (var y = -1; y <= 1; y++) {
+            for (var x = -1; x <= 1; x++) {
+                var offset = vec3<i32>(x, y, z);
+                var curr_cell = cell + offset;
+                var key = get_key(curr_cell, len);
+                var ivl = intervals[key];
+                if ivl.start_idx == 0u {
                     continue;
                 }
-                var dst = sqrt(sq_dst);
-                var slope = smoothing_kernel_deriv(dst);
 
-                // handle dst = 0.0 case (move in random non degeneerate dir)
-                var dir: vec3<f32>;
-                if dst == 0.0 {
-                    // opposite dirs
-                    dir = select(
-                        vec3<f32>(-1.0, 0.0, 0.0),
-                        vec3<f32>(1.0, 0.0, 0.0),
-                        index < other_idx,
-                    );
-                } else {
-                    dir = offset / dst;
+                var start_idx = ivl.start_idx - 1u;
+                var end_idx = ivl.end_idx - 1u;
+
+                for (var other_idx = start_idx; other_idx < end_idx; other_idx++) {
+                    var other_predicted_density = (*r_pos_density)[other_idx];
+                    var other_predicted = other_predicted_density.xyz;
+                    var other_density = other_predicted_density.w;
+                    var other_vel = (*r_vel)[other_idx].xyz;
+
+                    var other_cell = position_to_cell(other_predicted);
+                    if any(other_cell != curr_cell) {
+                        continue;
+                    }
+
+                    var offset = other_predicted - predicted;
+                    var sq_dst = dot(offset, offset);
+                    if sq_dst < sq_radius {
+                        if other_idx == index {
+                            continue;
+                        }
+                        var dst = sqrt(sq_dst);
+                        var slope = smoothing_kernel_deriv(dst);
+
+                        // handle dst = 0.0 case (move in random non degeneerate dir)
+                        var dir: vec3<f32>;
+                        if dst == 0.0 {
+                            dir = random_unit_vec3_fast(other_idx) * 2.0 - vec3<f32>(1.0);
+                        } else {
+                            dir = offset / dst;
+                        }
+
+                        // shared pressure + neighbor density
+                        var other_pressure = density_to_pressure(other_density);
+                        var shared_pressure = (pressure + other_pressure) * 0.5;
+
+                        pressure_force += shared_pressure * dir * slope * config.mass / max(other_density, EPSILON);
+
+                        // compute viscosity force
+                        var influence = viscosity_smoothing_kernel(dst);
+                        var vel_diff = other_vel - vel;
+
+                        viscosity += vel_diff * influence;
+                    }
                 }
-
-                // shared pressure + neighbor density
-                var other_pressure = density_to_pressure(other_density);
-                var shared_pressure = (pressure + other_pressure) * 0.5;
-
-                pressure_force += shared_pressure * dir * slope * config.mass / max(other_density, EPSILON);
-
-                // compute viscosity force
-                var influence = viscosity_smoothing_kernel(dst);
-                var vel_diff = other_vel - vel;
-
-                viscosity += vel_diff * influence;
             }
         }
     }

@@ -151,9 +151,9 @@ impl SimUniform {
             viscosity_strength: config.viscosity_strength,
             rest_density: config.target_density,
             mass: config.mass,
-            inv_density_kernel_volume: 1.0 / (PI * radius.powf(4.0) / 6.0),
-            density_kernel_scale: 12.0 / (PI * radius.powf(4.0)),
-            inv_viscosity_kernel_volume: 1.0 / (PI * radius.powf(8.0) / 4.0),
+            inv_density_kernel_volume: 15.0 / (2.0 * PI * radius.powf(5.0)),
+            density_kernel_scale: 15.0 / (PI * radius.powf(5.0)),
+            inv_viscosity_kernel_volume: (315.0 / (64.0 * PI * radius.powf(9.0))),
             _pad: [0.0; 1],
         }
     }
@@ -507,17 +507,31 @@ impl Sim {
 
         let scale = 0.5;
 
-        let width = config.size[0] * scale;
-        let height = config.size[1] * scale;
+        let size = Vector3::new(
+            config.size[0] * scale,
+            config.size[1] * scale,
+            config.size[2] * scale,
+        );
 
-        let num_row = (n as f32 * width / height).sqrt().floor() as usize;
-        let num_col = (n as f32 * height / width).sqrt().floor() as usize;
+        let cells_per_unit = (n as f32 / (size.x * size.y * size.z)).cbrt();
+
+        let nx = (size.x * cells_per_unit).round().max(1.0) as usize;
+        let ny = (size.y * cells_per_unit).round().max(1.0) as usize;
+        let nz = n.div_ceil(nx * ny);
 
         for i in 0..n {
-            let x = (i % num_row) as f32 / num_row as f32 * width;
-            let y = (i / num_row) as f32 / num_col as f32 * height;
+            let ix = i % nx;
+            let iy = (i / nx) % ny;
+            let iz = i / (nx * ny);
 
-            let pos = Point3::new(x as f32 - width / 2.0, y as f32 - height / 2.0, 0.0);
+            let spacing = Vector3::new(size.x / nx as f32, size.y / ny as f32, size.z / nz as f32);
+
+            let pos = Point3::new(
+                (ix as f32 + 0.5) * spacing.x,
+                (iy as f32 + 0.5) * spacing.y,
+                (iz as f32 + 0.5) * spacing.z,
+            ) - size * 0.5;
+
             particles.push(ParticleRaw {
                 pos: [pos.x, pos.y, pos.z, 0.0],
             });
