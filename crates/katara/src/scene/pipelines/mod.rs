@@ -88,11 +88,10 @@ impl ActivePipeline {
         }
     }
 
-    pub fn upload_frame(&mut self, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {
+    pub fn upload_frame(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {
         match self {
             Self::CpuSph(pipeline) => pipeline.upload_frame(queue, view_proj),
-            // Self::GpuSph(pipeline) => pipeline.upload_frame(queue, view_proj),
-            _ => {}
+            Self::GpuSph(pipeline) => pipeline.upload_frame(device, queue, view_proj),
         }
     }
 

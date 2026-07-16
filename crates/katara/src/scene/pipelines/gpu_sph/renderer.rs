@@ -255,9 +255,9 @@ impl BillboardRenderer {
                 depth_slice: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.02,
-                        g: 0.06,
-                        b: 0.02,
+                        r: 0.00,
+                        g: 0.00,
+                        b: 0.00,
                         a: 1.0,
                     }),
                     store: wgpu::StoreOp::Store,

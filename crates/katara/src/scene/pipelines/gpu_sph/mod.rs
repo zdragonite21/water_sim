@@ -1,8 +1,13 @@
 mod config;
+mod debug_overlay;
 mod renderer;
 mod sim;
 
-use crate::{profiling::GpuFrameRecorder, scene::pipelines::PipelineId};
+use crate::{
+    profiling::GpuFrameRecorder,
+    scene::pipelines::{PipelineId, gpu_sph::debug_overlay::DebugOverlay},
+};
+use cgmath::Matrix4;
 use renderer::BillboardRenderer;
 use sim::{Sim, Stats};
 
@@ -11,6 +16,7 @@ pub use config::Config;
 pub struct Pipeline {
     sim: Sim,
     renderer: BillboardRenderer,
+    debug_overlay: DebugOverlay,
 }
 
 impl Pipeline {
@@ -31,16 +37,24 @@ impl Pipeline {
             sim.velocity_buffers(),
         )?;
 
-        Ok(Self { sim, renderer })
+        let debug_overlay =
+            DebugOverlay::new(device, surface_config, bind_group_layout, &config.debug)?;
+
+        Ok(Self {
+            sim,
+            renderer,
+            debug_overlay,
+        })
     }
 
     pub fn resize(
         &mut self,
         device: &wgpu::Device,
-        _queue: &wgpu::Queue,
+        queue: &wgpu::Queue,
         config: &wgpu::SurfaceConfiguration,
     ) {
         self.renderer.resize(device, config);
+        self.debug_overlay.resize(queue, config);
     }
 
     pub fn reset(&mut self, device: &wgpu::Device) {
@@ -63,6 +77,20 @@ impl Pipeline {
         self.renderer.update_config(&config.render);
         self.renderer
             .update_uniforms(queue, config.sim.target_density);
+        self.debug_overlay.update_config(&config.debug);
+    }
+
+    pub fn upload_frame(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        view_proj: &Matrix4<f32>,
+    ) {
+        let size = self.sim.bounds();
+        let radius = self.sim.smoothing_radius();
+
+        self.debug_overlay
+            .upload_config(device, queue, view_proj, &size, radius);
     }
 
     pub fn stats(&self) -> Stats {
@@ -87,6 +115,9 @@ impl Pipeline {
             camera_bind_group,
             self.sim.velocity_buffer_index(),
         )?;
+
+        self.debug_overlay
+            .draw(encoder, target_view, camera_bind_group)?;
 
         Ok(())
     }

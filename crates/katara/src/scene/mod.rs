@@ -114,7 +114,6 @@ impl Scene {
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         dt: instant::Duration,
-        view_proj: &Matrix4<f32>,
     ) {
         if !self.paused {
             self.accumulator += dt;
@@ -136,7 +135,6 @@ impl Scene {
             }
             self.steps = 0;
         }
-        self.upload_scene_data(queue, view_proj);
     }
 
     pub fn step(&mut self) {
@@ -200,7 +198,12 @@ impl Scene {
             .render(encoder, target_view, camera_bind_group)
     }
 
-    fn upload_scene_data(&mut self, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {
-        self.pipeline.upload_frame(queue, view_proj);
+    pub fn upload_frame(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        view_proj: &Matrix4<f32>,
+    ) {
+        self.pipeline.upload_frame(device, queue, view_proj);
     }
 }

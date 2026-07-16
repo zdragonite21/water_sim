@@ -326,8 +326,12 @@ impl State {
 
     fn update(&mut self, encoder: &mut wgpu::CommandEncoder, dt: instant::Duration) {
         self.camera.update(&self.queue, dt);
+        self.scene.update(&self.queue, encoder, dt);
+    }
+
+    fn upload(&mut self) {
         self.scene
-            .update(&self.queue, encoder, dt, &self.camera.view_proj());
+            .upload_frame(&self.device, &self.queue, &self.camera.view_proj());
     }
 
     fn render(
@@ -411,6 +415,7 @@ impl State {
             let gpu = self.profiler.gpu_recorder();
             let render_result = gpu_profile!(gpu.as_ref(), &mut encoder, "Frame", {
                 self.update(&mut encoder, self.frame_clock.dt);
+                self.upload();
                 self.render(&mut encoder, &output)
             });
             self.profiler.resolve_gpu_queries(&mut encoder);
