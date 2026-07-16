@@ -593,14 +593,18 @@ impl Sim {
 impl Sim {
     pub fn get_stats(&self) -> Stats {
         let particle_count = self.num_particles;
-        let volume = self.config.size[0] * self.config.size[1] * self.config.size[2];
-        let exp_density = particle_count as f32 * self.config.mass / volume;
-        let exp_neighbor_count =
-            PI * self.config.smoothing_radius.powi(2) * particle_count as f32 / volume;
+        let r = self.config.smoothing_radius;
+        let size = Vector3::new(
+            self.config.size[0],
+            self.config.size[1],
+            self.config.size[2],
+        );
 
-        let num_cells = (self.config.size[0] / self.config.smoothing_radius).ceil()
-            * (self.config.size[1] / self.config.smoothing_radius).ceil()
-            * (self.config.size[2] / self.config.smoothing_radius).ceil();
+        let volume = size.x * size.y * size.z;
+        let exp_density = particle_count as f32 * self.config.mass / volume;
+        let exp_neighbor_count = 4.0 / 3.0 * PI * r * r * r * particle_count as f32 / volume;
+
+        let num_cells = (size.x / r).ceil() * (size.y / r).ceil() * (size.z / r).ceil();
         let exp_particles_per_cell = particle_count as f32 / num_cells;
 
         Stats {

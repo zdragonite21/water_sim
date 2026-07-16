@@ -353,7 +353,9 @@ fn pressure_viscosity(
                         // handle dst = 0.0 case (move in random non degeneerate dir)
                         var dir: vec3<f32>;
                         if dst == 0.0 {
-                            dir = random_unit_vec3_fast(other_idx) * 2.0 - vec3<f32>(1.0);
+                            // random, equal and opposite dirs
+                            dir = random_unit_vec3_fast(other_idx ^ index);
+                            dir *= select(1.0, -1.0, index > other_idx);
                         } else {
                             dir = offset / dst;
                         }
