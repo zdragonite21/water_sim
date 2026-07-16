@@ -156,25 +156,46 @@ impl DebugOverlay {
         let z_min = grid.z_axis.min_world();
         let z_max = grid.z_axis.max_world();
 
-        // Lines parallel to X
+        // XY faces: z is fixed at min/max
         for y in grid.y_axis.iter_world() {
-            for z in grid.z_axis.iter_world() {
+            for z in grid.z_axis.bounds_world() {
                 self.line_batch
                     .push_segment((x_min, y, z), (x_max, y, z), GRID_COLOR, GRID_WIDTH);
             }
         }
 
-        // Lines parallel to Y
+        // XZ faces: y is fixed at min/max
+        // Skip boundary z values because those four edges already exist above.
+        for z in grid.z_axis.iter_interior_world() {
+            for y in grid.y_axis.bounds_world() {
+                self.line_batch
+                    .push_segment((x_min, y, z), (x_max, y, z), GRID_COLOR, GRID_WIDTH);
+            }
+        }
+
+        // Y-parallel
         for x in grid.x_axis.iter_world() {
-            for z in grid.z_axis.iter_world() {
+            for z in grid.z_axis.bounds_world() {
+                self.line_batch
+                    .push_segment((x, y_min, z), (x, y_max, z), GRID_COLOR, GRID_WIDTH);
+            }
+        }
+        for z in grid.z_axis.iter_interior_world() {
+            for x in grid.x_axis.bounds_world() {
                 self.line_batch
                     .push_segment((x, y_min, z), (x, y_max, z), GRID_COLOR, GRID_WIDTH);
             }
         }
 
-        // Lines parallel to Z
+        // Z-parallel
         for x in grid.x_axis.iter_world() {
-            for y in grid.y_axis.iter_world() {
+            for y in grid.y_axis.bounds_world() {
+                self.line_batch
+                    .push_segment((x, y, z_min), (x, y, z_max), GRID_COLOR, GRID_WIDTH);
+            }
+        }
+        for y in grid.y_axis.iter_interior_world() {
+            for x in grid.x_axis.bounds_world() {
                 self.line_batch
                     .push_segment((x, y, z_min), (x, y, z_max), GRID_COLOR, GRID_WIDTH);
             }
@@ -217,7 +238,7 @@ impl SpatialGridOverlay {
         let nx = self.x_axis.raw_count();
         let ny = self.y_axis.raw_count();
         let nz = self.z_axis.raw_count();
-        ny * nz + nx * nz + nx * ny
+        4 * (nx + ny + nz) - 12
     }
 }
 
@@ -245,8 +266,20 @@ impl GridAxis {
         (self.end_cell - self.start_cell + 1).max(0) as usize
     }
 
+    fn iter_cells(&self) -> impl Iterator<Item = i32> + '_ {
+        self.start_cell..=self.end_cell
+    }
+
     fn iter_world(&self) -> impl Iterator<Item = f32> + '_ {
-        (self.start_cell..=self.end_cell).map(|cell| cell as f32 * self.radius)
+        self.iter_cells().map(|cell| cell as f32 * self.radius)
+    }
+
+    fn iter_interior_world(&self) -> impl Iterator<Item = f32> + '_ {
+        ((self.start_cell + 1)..self.end_cell).map(|cell| cell as f32 * self.radius)
+    }
+
+    fn bounds_world(&self) -> [f32; 2] {
+        [self.min_world(), self.max_world()]
     }
 
     fn min_world(&self) -> f32 {
