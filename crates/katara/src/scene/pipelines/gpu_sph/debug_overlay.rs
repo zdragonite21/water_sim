@@ -101,10 +101,8 @@ impl DebugOverlay {
     ) {
         self.rebuild_lines(size, radius);
         let n = self.line_batch.lines().len();
-        if n > 0 {
-            self.resize_capacity(device, n);
-            self.upload(queue, view_proj);
-        }
+        self.resize_capacity(device, n);
+        self.upload(queue, view_proj);
     }
 
     pub fn draw(
