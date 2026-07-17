@@ -1,13 +1,15 @@
 use crate::{config::AppConfig, state::State};
 use std::sync::Arc;
-#[cfg(not(target_arch = "wasm32"))]
-use winit::event::ElementState;
 use winit::{
     application::ApplicationHandler,
-    event::{DeviceEvent, DeviceId, Event, KeyEvent, WindowEvent},
+    event::{DeviceEvent, DeviceId, Event, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
-    keyboard::{KeyCode, PhysicalKey},
     window::Window,
+};
+#[cfg(not(target_arch = "wasm32"))]
+use winit::{
+    event::{ElementState, KeyEvent},
+    keyboard::{KeyCode, PhysicalKey},
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -24,6 +26,7 @@ struct App {
     config: AppConfig,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Default for App {
     fn default() -> Self {
         Self::new()
@@ -90,11 +93,12 @@ impl ApplicationHandler<State> for App {
             // Run the future asynchronously and use the
             // proxy to send the results to the event loop
             if let Some(proxy) = self.proxy.take() {
+                let config = self.config.clone();
                 wasm_bindgen_futures::spawn_local(async move {
                     assert!(
                         proxy
                             .send_event(
-                                State::new(window, &self.config)
+                                State::new(window, &config)
                                     .await
                                     .expect("Unable to create canvas!!!")
                             )

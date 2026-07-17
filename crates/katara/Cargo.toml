@@ -30,9 +30,9 @@ wgpu_sort = { path = "../wgpu_sort" }
 profiling = { version = "1.0.18", features = ["profile-with-puffin"] }
 wgpu-profiler = "0.27"
 
-imgui = "0.12"
-imgui-winit-support = "0.13"
-imgui-wgpu = "0.28"
+imgui = { package = "dear-imgui-rs", version = "0.15.1" }
+imgui-winit-support = { package = "dear-imgui-winit", version = "0.15.1" }
+imgui-wgpu = { package = "dear-imgui-wgpu", version = "0.15.1" }
 
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
@@ -46,6 +46,7 @@ optional = true
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1"
 console_log = "1.0"
+getrandom = { version = "0.4", features = ["wasm_js"] }
 puffin = { version = "0.20", features = ["web"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"

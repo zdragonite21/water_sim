@@ -9,7 +9,7 @@ use winit::window::Window;
 pub struct Gui {
     context: imgui::Context,
     platform: imgui_winit_support::WinitPlatform,
-    renderer: imgui_wgpu::Renderer,
+    renderer: imgui_wgpu::WgpuRenderer,
 
     debug_text: DebugText,
 }
@@ -23,21 +23,13 @@ impl Gui {
     ) -> Self {
         let mut imgui = imgui::Context::create();
         let mut platform = imgui_winit_support::WinitPlatform::new(&mut imgui);
-        platform.attach_window(
-            imgui.io_mut(),
-            window,
-            imgui_winit_support::HiDpiMode::Rounded,
-        );
+        platform.attach_window(window, imgui_winit_support::HiDpiMode::Rounded, &mut imgui);
 
-        let renderer = imgui_wgpu::Renderer::new(
+        let renderer = imgui_wgpu::WgpuRenderer::new(
+            imgui_wgpu::WgpuInitInfo::new(device.clone(), queue.clone(), surface_format),
             &mut imgui,
-            device,
-            queue,
-            imgui_wgpu::RendererConfig {
-                texture_format: surface_format,
-                ..imgui_wgpu::RendererConfig::new()
-            },
-        );
+        )
+        .expect("failed to initialize Dear ImGui renderer");
 
         Self {
             context: imgui,
@@ -48,18 +40,17 @@ impl Gui {
     }
 
     pub fn handle_event<T>(&mut self, window: &Window, event: &Event<T>) {
-        self.platform
-            .handle_event(self.context.io_mut(), window, event);
+        self.platform.handle_event(&mut self.context, window, event);
     }
 
     pub fn wants_mouse(&self) -> bool {
         let io = self.context.io();
-        io.want_capture_mouse
+        io.want_capture_mouse()
     }
 
     pub fn wants_keyboard(&self) -> bool {
         let io = self.context.io();
-        io.want_capture_keyboard
+        io.want_capture_keyboard()
     }
 
     pub fn toggle_debug_text(&mut self) {
@@ -69,8 +60,6 @@ impl Gui {
     pub fn render(
         &mut self,
         dt: instant::Duration,
-        device: &Device,
-        queue: &Queue,
         encoder: &mut wgpu::CommandEncoder,
         target_view: &wgpu::TextureView,
         window: &Window,
@@ -79,8 +68,10 @@ impl Gui {
         scene_stats: &SceneStats,
         profiler: &mut Profiler,
     ) -> anyhow::Result<()> {
-        self.context.io_mut().update_delta_time(dt);
-        self.platform.prepare_frame(self.context.io_mut(), window)?;
+        self.context
+            .io_mut()
+            .set_delta_time(dt.max(instant::Duration::from_nanos(1)).as_secs_f32());
+        self.platform.prepare_frame(window, &mut self.context);
 
         let ui = self.context.frame();
 
@@ -89,8 +80,7 @@ impl Gui {
         scene_config.draw(ui);
         profiler.draw(ui);
 
-        self.platform.prepare_render(ui, window);
-        let draw_data = self.context.render();
+        self.platform.prepare_render(&mut self.context, window);
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Debug GUI Render Pass"),
@@ -108,7 +98,8 @@ impl Gui {
         });
 
         self.renderer
-            .render(draw_data, queue, device, &mut render_pass)?;
+            .render_context(&mut self.context, &mut render_pass)
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
         Ok(())
     }
@@ -135,13 +126,17 @@ impl DebugText {
 
         ui.window("Debug Text")
             .position([10.0, 10.0], imgui::Condition::Always)
-            .no_decoration()
-            // .no_inputs()
-            .always_auto_resize(true)
-            .draw_background(false)
-            .save_settings(false)
+            .flags(
+                imgui::WindowFlags::NO_TITLE_BAR
+                    | imgui::WindowFlags::NO_RESIZE
+                    | imgui::WindowFlags::NO_SCROLLBAR
+                    | imgui::WindowFlags::NO_COLLAPSE
+                    | imgui::WindowFlags::ALWAYS_AUTO_RESIZE
+                    | imgui::WindowFlags::NO_BACKGROUND
+                    | imgui::WindowFlags::NO_SAVED_SETTINGS,
+            )
             .build(|| {
-                draw_text_with_bg(ui, &format!("FPS: {:.1}", ui.io().framerate));
+                draw_text_with_bg(ui, &format!("FPS: {:.1}", ui.io().framerate()));
 
                 if self.open {
                     // debug text from scene stats
@@ -186,7 +181,9 @@ impl DebugText {
 }
 
 fn draw_text_with_bg(ui: &imgui::Ui, text: &str) {
-    let text_size = ui.calc_text_size(text);
+    let text_size = ui
+        .current_font()
+        .calc_text_size(ui.current_font_size(), f32::MAX, 0.0, text);
     let cursor_pos = ui.cursor_screen_pos();
     let padding = [4.0, 0.0];
     let background_max = [
@@ -195,11 +192,7 @@ fn draw_text_with_bg(ui: &imgui::Ui, text: &str) {
     ];
 
     ui.get_window_draw_list()
-        .add_rect(
-            cursor_pos,
-            background_max,
-            imgui::ImColor32::from_rgba(0, 0, 0, 127),
-        )
+        .add_rect(cursor_pos, background_max, [0.0, 0.0, 0.0, 127.0 / 255.0])
         .filled(true)
         .build();
 

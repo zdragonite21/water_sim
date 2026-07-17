@@ -359,8 +359,6 @@ impl State {
 
         self.gui.render(
             self.frame_clock.dt,
-            &self.device,
-            &self.queue,
             encoder,
             &view,
             &self.window,
