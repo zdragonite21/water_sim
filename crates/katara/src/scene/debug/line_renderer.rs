@@ -5,7 +5,7 @@ use crate::{
     },
     scene::debug::line::Line3d,
 };
-use cgmath::{Matrix4, Point3, Transform};
+use cgmath::{Matrix4, Point3, Vector4};
 use wgpu::util::DeviceExt;
 
 pub struct LineRenderer {
@@ -211,18 +211,19 @@ impl LineRenderer {
         let mut instance_data = Vec::with_capacity(lines.len().min(self.capacity));
 
         for line in lines {
+            let Some((start, end)) = Self::clip_to_frustum(
+                *view_proj * Vector4::new(line.start.x, line.start.y, line.start.z, 1.0),
+                *view_proj * Vector4::new(line.end.x, line.end.y, line.end.z, 1.0),
+            ) else {
+                continue;
+            };
+
             let screen_line = Line3d {
-                start: view_proj.transform_point(line.start),
-                end: view_proj.transform_point(line.end),
+                start,
+                end,
                 color: line.color,
                 width_px: line.width_px,
             };
-
-            if !Self::is_point_visible(screen_line.start)
-                || !Self::is_point_visible(screen_line.end)
-            {
-                continue;
-            }
 
             if self.visible_line_count >= self.capacity {
                 break;
@@ -251,11 +252,81 @@ impl LineRenderer {
         }
     }
 
-    fn is_point_visible(point: Point3<f32>) -> bool {
-        point.x.is_finite()
-            && point.y.is_finite()
-            && point.z.is_finite()
-            && (0.0..=1.0).contains(&point.z)
+    fn clip_to_frustum(
+        start: Vector4<f32>,
+        end: Vector4<f32>,
+    ) -> Option<(Point3<f32>, Point3<f32>)> {
+        if ![
+            start.x, start.y, start.z, start.w, end.x, end.y, end.z, end.w,
+        ]
+        .into_iter()
+        .all(f32::is_finite)
+        {
+            return None;
+        }
+
+        // -1 <= x / w <= 1
+        // -1 <= y / w <= 1
+        //  0 <= z / w <= 1
+        let start_distances = [
+            start.x + start.w,
+            start.w - start.x,
+            start.y + start.w,
+            start.w - start.y,
+            start.z,
+            start.w - start.z,
+        ];
+        let end_distances = [
+            end.x + end.w,
+            end.w - end.x,
+            end.y + end.w,
+            end.w - end.y,
+            end.z,
+            end.w - end.z,
+        ];
+
+        let mut enter = 0.0_f32;
+        let mut exit = 1.0_f32;
+
+        for (start_distance, end_distance) in start_distances.into_iter().zip(end_distances) {
+            if start_distance < 0.0 && end_distance < 0.0 {
+                return None;
+            }
+
+            if start_distance < 0.0 || end_distance < 0.0 {
+                let intersection = start_distance / (start_distance - end_distance);
+                if start_distance < 0.0 {
+                    enter = enter.max(intersection);
+                } else {
+                    exit = exit.min(intersection);
+                }
+            }
+        }
+
+        if enter > exit {
+            return None;
+        }
+
+        let delta = end - start;
+        let clipped_start = start + delta * enter;
+        let clipped_end = start + delta * exit;
+
+        if clipped_start.w <= f32::EPSILON || clipped_end.w <= f32::EPSILON {
+            return None;
+        }
+
+        Some((
+            Point3::new(
+                clipped_start.x / clipped_start.w,
+                clipped_start.y / clipped_start.w,
+                clipped_start.z / clipped_start.w,
+            ),
+            Point3::new(
+                clipped_end.x / clipped_end.w,
+                clipped_end.y / clipped_end.w,
+                clipped_end.z / clipped_end.w,
+            ),
+        ))
     }
 
     pub fn draw(
@@ -363,5 +434,45 @@ impl LineInstanceRaw {
             color: line.color,
             width_px: line.width_px,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LineRenderer;
+    use cgmath::Vector4;
+
+    #[test]
+    fn clips_a_partially_visible_line() {
+        let (start, end) = LineRenderer::clip_to_frustum(
+            Vector4::new(-2.0, 0.0, 0.5, 1.0),
+            Vector4::new(0.0, 0.0, 0.5, 1.0),
+        )
+        .unwrap();
+
+        assert!((start.x + 1.0).abs() < f32::EPSILON);
+        assert!((end.x - 0.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn rejects_a_completely_invisible_line() {
+        assert!(
+            LineRenderer::clip_to_frustum(
+                Vector4::new(-3.0, 0.0, 0.5, 1.0),
+                Vector4::new(-2.0, 0.0, 0.5, 1.0),
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn clips_at_wgpu_near_plane() {
+        let (start, _) = LineRenderer::clip_to_frustum(
+            Vector4::new(0.0, 0.0, -1.0, 1.0),
+            Vector4::new(0.0, 0.0, 0.5, 1.0),
+        )
+        .unwrap();
+
+        assert!(start.z.abs() < f32::EPSILON);
     }
 }
