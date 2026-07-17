@@ -181,7 +181,18 @@ fn upload_keys(
 
     var pos = (*r_pos)[index].xyz;
     var vel = (*r_vel)[index].xyz;
+    vel = apply_vortex(
+        pos,
+        vel,
+        vec3<f32>(0.0, 0.0, 0.0),
+        vec3<f32>(0.0, -1.0, 0.0),
+        10.0,
+        5.0,
+        10.0,
+        2.0,
+    );
     vel = apply_gravity(vel);
+
     // apply gravity to get predicted
     var predicted = pos + vel * LOOK_AHEAD_FACTOR;
 

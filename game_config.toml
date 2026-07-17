@@ -54,7 +54,7 @@ size = [
 smoothing_radius = 0.30000001192092896
 target_density = 19.610000610351563
 pressure_multiplier = 247.60000610351563
-viscosity_strength = 1.5
+viscosity_strength = 0.20000000298023224
 mass = 0.07999999821186066
 damping = 0.05000000074505806
 
@@ -62,7 +62,7 @@ damping = 0.05000000074505806
 particle_size = 0.09799999743700027
 
 [scene.pipeline_configs.gpu_sph.debug]
-enabled = true
+enabled = false
 xray = false
 velocity = false
 bounds = true
