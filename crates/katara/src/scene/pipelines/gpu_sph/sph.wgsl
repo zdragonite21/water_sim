@@ -84,10 +84,6 @@ fn random_unit_vec3_fast(seed: u32) -> vec3<f32> {
     return v * inverseSqrt(max(dot(v, v), 1e-12));
 }
 
-fn apply_gravity(vel: vec3<f32>) -> vec3<f32> {
-    return vel + -vec3<f32>(0.0, 1.0, 0.0) * config.gravity * config.dt;
-}
-
 fn smoothing_kernel(dst: f32) -> f32 {
     let radius = config.smoothing_radius;
     if dst >= radius {
@@ -124,6 +120,45 @@ const MAX_U32: u32 = 0xffffffffu;
 const EPSILON: f32 = 0.0001;
 const LOOK_AHEAD_NUM = 120.0;
 const LOOK_AHEAD_FACTOR: f32 = 1.0 / LOOK_AHEAD_NUM;
+
+fn apply_gravity(vel: vec3<f32>) -> vec3<f32> {
+    return vel + -vec3<f32>(0.0, 1.0, 0.0) * config.gravity * config.dt;
+}
+
+fn apply_vortex(
+    pos: vec3<f32>,
+    vel: vec3<f32>,
+    center: vec3<f32>,
+    axis_in: vec3<f32>,
+    radius: f32,
+    spin: f32,
+    pull: f32,
+    lift: f32,
+) -> vec3<f32> {
+    // assume axis_in is normalized
+    let axis = axis_in;
+    let relative = pos - center;
+
+    let axial_offset = dot(relative, axis);
+    let radial = relative - axis * axial_offset;
+    let distance = length(radial);
+
+    if distance >= radius || distance < 0.0001 {
+        return vel;
+    }
+
+    let radial_dir = radial / distance;
+    let tangent = normalize(cross(axis, radial_dir));
+
+    let x = 1.0 - distance / radius;
+    let falloff = x * x;
+
+    let acceleration = tangent * spin * falloff
+        - radial_dir * pull * falloff
+        + axis * lift * falloff;
+
+    return vel + acceleration * config.dt;
+}
 
 @compute
 @workgroup_size(WORK_GROUP_SIZE)
