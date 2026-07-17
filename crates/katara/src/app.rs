@@ -15,9 +15,14 @@ use winit::{
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
+use wasm_bindgen::JsValue;
+#[cfg(target_arch = "wasm32")]
 use winit::platform::web::EventLoopExtWebSys;
 
+#[cfg(not(target_arch = "wasm32"))]
 const CONFIG_FILE: &str = "game_config.toml";
+#[cfg(target_arch = "wasm32")]
+const DEFAULT_CONFIG: &str = include_str!("../../../100k_config.toml");
 
 struct App {
     #[cfg(target_arch = "wasm32")]
@@ -38,10 +43,14 @@ impl App {
         #[cfg(target_arch = "wasm32")]
         let proxy = Some(event_loop.create_proxy());
 
+        #[cfg(not(target_arch = "wasm32"))]
         let config = AppConfig::load(CONFIG_FILE).unwrap_or_else(|err| {
             log::warn!("failed to load {CONFIG_FILE}; using defaults: {err}");
             AppConfig::default()
         });
+
+        #[cfg(target_arch = "wasm32")]
+        let config = toml::from_str(DEFAULT_CONFIG).expect("failed to parse 100k_config.toml");
         Self {
             state: None,
             #[cfg(target_arch = "wasm32")]
@@ -50,6 +59,7 @@ impl App {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn save_config(&self) {
         if let Some(state) = &self.state {
             if let Err(err) = state.current_config().save(CONFIG_FILE) {
@@ -59,14 +69,18 @@ impl App {
             }
         }
     }
+
 }
 
 impl ApplicationHandler<State> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        #[allow(unused_mut)]
-        let mut window_attributes = Window::default_attributes().with_inner_size(
+        #[cfg(not(target_arch = "wasm32"))]
+        let window_attributes = Window::default_attributes().with_inner_size(
             winit::dpi::PhysicalSize::new(self.config.window.width, self.config.window.height),
         );
+
+        #[cfg(target_arch = "wasm32")]
+        let mut window_attributes = Window::default_attributes();
 
         #[cfg(target_arch = "wasm32")]
         {
@@ -184,6 +198,7 @@ impl ApplicationHandler<State> for App {
     }
 
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
+        #[cfg(not(target_arch = "wasm32"))]
         self.save_config();
     }
 }
@@ -215,9 +230,24 @@ pub fn run() -> anyhow::Result<()> {
 }
 
 #[cfg(target_arch = "wasm32")]
+fn check_webgpu() -> Result<(), JsValue> {
+    let window = web_sys::window().ok_or_else(|| JsValue::from_str("window is unavailable"))?;
+    let gpu = js_sys::Reflect::get(&window.navigator(), &JsValue::from_str("gpu"))?;
+
+    if gpu.is_null() || gpu.is_undefined() {
+        return Err(JsValue::from_str(
+            "WebGPU is unavailable: enable WebGPU in this browser or use a browser with WebGPU support.",
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen(start)]
 pub fn run_web() -> Result<(), wasm_bindgen::JsValue> {
     console_error_panic_hook::set_once();
+    check_webgpu()?;
     run().unwrap_throw();
 
     Ok(())

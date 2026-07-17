@@ -1604,6 +1604,7 @@ dependencies = [
  "image",
  "include-wgsl-oil",
  "instant",
+ "js-sys",
  "log",
  "naga_oil 0.2.0",
  "pollster",

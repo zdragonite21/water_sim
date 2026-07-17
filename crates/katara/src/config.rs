@@ -3,8 +3,10 @@ use crate::{
     gui::Panel,
     inspect::{Inspect, inspect_config},
 };
-use anyhow::Context;
 use serde::{Deserialize, Serialize};
+#[cfg(not(target_arch = "wasm32"))]
+use anyhow::Context;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -16,6 +18,7 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn load(path: impl AsRef<Path>) -> anyhow::Result<Self> {
         let path = path.as_ref();
 
@@ -31,6 +34,7 @@ impl AppConfig {
         toml::from_str(&text).with_context(|| format!("failed to parse {}", path.display()))
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn save(&self, path: impl AsRef<Path>) -> anyhow::Result<()> {
         let text = toml::to_string_pretty(self)?;
         std::fs::write(path.as_ref(), text)

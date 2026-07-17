@@ -17,12 +17,18 @@ use crate::{
 };
 use crate::{frame_clock::FrameClock, gui::Gui};
 
+#[cfg(target_arch = "wasm32")]
+const CAMERA_MOUSE_BUTTON: MouseButton = MouseButton::Left;
+#[cfg(not(target_arch = "wasm32"))]
+const CAMERA_MOUSE_BUTTON: MouseButton = MouseButton::Right;
+
 pub struct State {
     pub window: Arc<Window>,
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    render_format: wgpu::TextureFormat,
     is_surface_configured: bool,
 
     pub camera: CameraRig,
@@ -94,13 +100,23 @@ impl State {
         let surface_format = surface_caps
             .formats
             .iter()
-            .find(|f| f.is_srgb())
             .copied()
-            .unwrap_or(surface_caps.formats[0]);
+            .find(wgpu::TextureFormat::is_srgb)
+            .unwrap_or_else(|| {
+                log::warn!("No sRGB surface format available; colors may appear darker");
+                surface_caps.formats[0]
+            });
+
+        let render_format = surface_format.add_srgb_suffix();
+        let view_formats = (render_format != surface_format)
+            .then_some(vec![render_format])
+            .unwrap_or_default();
 
         log::debug!(
-            "surface capabilities:\nselected_format={:?}\npresent_modes={:?}\nalpha_modes={:?}",
+            "surface capabilities:\nselected_format={:?}\nrender_format={:?}\nview_formats={:?}\npresent_modes={:?}\nalpha_modes={:?}",
             surface_format,
+            render_format,
+            view_formats,
             surface_caps.present_modes,
             surface_caps.alpha_modes
         );
@@ -113,16 +129,19 @@ impl State {
                 height: size.height,
                 present_mode: wgpu::PresentMode::Fifo,
                 alpha_mode: surface_caps.alpha_modes[0],
-                view_formats: vec![],
+                view_formats,
                 desired_maximum_frame_latency: 2,
             };
+
+        let mut render_config = config.clone();
+        render_config.format = render_format;
 
         let camera = CameraRig::new(&device, config.width, config.height, &app_config.camera);
         let profiler = Profiler::new(&device, gpu_profiling_supported);
 
         let scene = Scene::new(
             &device,
-            &config,
+            &render_config,
             &camera.bind_group_layout,
             &app_config.scene,
             profiler.gpu_recorder(),
@@ -132,7 +151,7 @@ impl State {
 
         let frame_clock = FrameClock::new();
 
-        let gui = Gui::new(&device, &queue, &window, surface_format);
+        let gui = Gui::new(&device, &queue, &window, render_format);
 
         Ok(Self {
             window,
@@ -140,6 +159,7 @@ impl State {
             device,
             queue,
             config,
+            render_format,
             is_surface_configured: false,
             camera,
             scene,
@@ -219,17 +239,23 @@ impl State {
             }
             WindowEvent::MouseInput {
                 state,
-                button: MouseButton::Right,
+                button,
                 ..
-            } if *state == ElementState::Pressed && !self.gui_wants_mouse() => {
+            } if *button == CAMERA_MOUSE_BUTTON
+                && *state == ElementState::Pressed
+                && !self.gui_wants_mouse() =>
+            {
                 self.set_camera_capture(true);
                 true
             }
             WindowEvent::MouseInput {
                 state,
-                button: MouseButton::Right,
+                button,
                 ..
-            } if *state == ElementState::Released && self.camera.controller.is_captured() => {
+            } if *button == CAMERA_MOUSE_BUTTON
+                && *state == ElementState::Released
+                && self.camera.controller.is_captured() =>
+            {
                 self.set_camera_capture(false);
                 true
             }
@@ -330,6 +356,12 @@ impl State {
         return Ok((output, reconfigure_after_present, encoder));
     }
 
+    fn render_config(&self) -> wgpu::SurfaceConfiguration {
+        let mut config = self.config.clone();
+        config.format = self.render_format;
+        config
+    }
+
     fn update(&mut self, encoder: &mut wgpu::CommandEncoder, dt: instant::Duration) {
         self.camera.update(&self.queue, dt);
         self.scene.update(&self.queue, encoder, dt);
@@ -347,7 +379,10 @@ impl State {
     ) -> anyhow::Result<()> {
         let view = output
             .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+            .create_view(&wgpu::TextureViewDescriptor {
+                format: Some(self.render_format),
+                ..Default::default()
+            });
 
         let gpu = self.profiler.gpu_recorder();
         let render_result = gpu_profile!(gpu.as_ref(), encoder, "Particle render", {
@@ -411,7 +446,7 @@ impl State {
             if self.scene.sync_pipeline(
                 &self.device,
                 &self.queue,
-                &self.config,
+                &self.render_config(),
                 &self.camera.bind_group_layout,
             )? {
                 self.reset_scene();
