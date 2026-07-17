@@ -2,7 +2,7 @@ name: Deploy web build
 
 on:
   push:
-    branches: [main]
+    branches: [compute-sph]
   workflow_dispatch:
 
 permissions:
