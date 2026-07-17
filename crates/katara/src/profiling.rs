@@ -154,42 +154,42 @@ impl Profiler {
         profiling::puffin::set_scopes_on(false);
     }
 
-    pub fn draw(&mut self, ui: &imgui::Ui) {
+    pub fn draw(&mut self, context: &egui::Context) {
         let mut capturing = self.capturing;
 
-        ui.window("Profiler")
-            .size([380.0, 420.0], imgui::Condition::FirstUseEver)
-            .build(|| {
-                ui.checkbox("Capture profiling", &mut capturing);
-                ui.text(if capturing { "Capturing" } else { "Frozen" });
+        egui::Window::new("Profiler")
+            .default_size([260.0, 260.0])
+            .show(context, |ui| {
+                ui.checkbox(&mut capturing, "Capture profiling");
+                ui.label(if capturing { "Capturing" } else { "Frozen" });
 
                 ui.separator();
                 if let Some(frame) = frame_row(&self.cpu_rows) {
                     draw_section_header(ui, "CPU", frame);
-                    ui.indent();
-                    for row in self.cpu_rows.iter().filter(|row| row.label != "Frame") {
-                        draw_cpu_timing_row(ui, row);
-                    }
-                    ui.unindent();
+                    ui.indent("cpu timings", |ui| {
+                        for row in self.cpu_rows.iter().filter(|row| row.label != "Frame") {
+                            draw_cpu_timing_row(ui, row);
+                        }
+                    });
                 } else {
-                    ui.text("CPU");
-                    ui.text("Waiting for results");
+                    ui.label("CPU");
+                    ui.label("Waiting for results");
                 }
 
                 ui.separator();
                 if self.gpu.is_none() {
-                    ui.text("GPU");
-                    ui.text("Unavailable on this device");
+                    ui.label("GPU");
+                    ui.label("Unavailable on this device");
                 } else if let Some(frame) = frame_row(&self.gpu_rows) {
                     draw_section_header(ui, "GPU", frame);
-                    ui.indent();
-                    for row in self.gpu_rows.iter().filter(|row| row.label != "Frame") {
-                        draw_gpu_timing_row(ui, row, frame.average_ms);
-                    }
-                    ui.unindent();
+                    ui.indent("gpu timings", |ui| {
+                        for row in self.gpu_rows.iter().filter(|row| row.label != "Frame") {
+                            draw_gpu_timing_row(ui, row, frame.average_ms);
+                        }
+                    });
                 } else {
-                    ui.text("GPU");
-                    ui.text("Waiting for results");
+                    ui.label("GPU");
+                    ui.label("Waiting for results");
                 }
             });
 
@@ -332,35 +332,35 @@ fn is_cpu_scope(label: &str) -> bool {
     )
 }
 
-fn draw_timing_row(ui: &imgui::Ui, row: &TimingRow) {
-    ui.text(format!("{}  {:.3} ms", row.label, row.average_ms));
+fn draw_timing_row(ui: &mut egui::Ui, row: &TimingRow) -> egui::Response {
+    ui.label(format!("{}  {:.3} ms", row.label, row.average_ms))
 }
 
-fn draw_cpu_timing_row(ui: &imgui::Ui, row: &TimingRow) {
-    draw_timing_row(ui, row);
-    draw_timing_tooltip(ui, row, None);
+fn draw_cpu_timing_row(ui: &mut egui::Ui, row: &TimingRow) {
+    draw_timing_tooltip(draw_timing_row(ui, row), row, None);
 }
 
-fn draw_gpu_timing_row(ui: &imgui::Ui, row: &TimingRow, frame_ms: f64) {
-    draw_timing_row(ui, row);
-    draw_timing_tooltip(ui, row, Some(percentage(row.average_ms, frame_ms)));
+fn draw_gpu_timing_row(ui: &mut egui::Ui, row: &TimingRow, frame_ms: f64) {
+    draw_timing_tooltip(
+        draw_timing_row(ui, row),
+        row,
+        Some(percentage(row.average_ms, frame_ms)),
+    );
 }
 
-fn draw_section_header(ui: &imgui::Ui, label: &str, row: &TimingRow) {
-    ui.text(format!("{}  {:.3} ms", label, row.average_ms));
-    draw_timing_tooltip(ui, row, None);
+fn draw_section_header(ui: &mut egui::Ui, label: &str, row: &TimingRow) {
+    let response = ui.label(format!("{}  {:.3} ms", label, row.average_ms));
+    draw_timing_tooltip(response, row, None);
 }
 
-fn draw_timing_tooltip(ui: &imgui::Ui, row: &TimingRow, percent: Option<f64>) {
-    if ui.is_item_hovered() {
-        ui.tooltip(|| {
-            ui.text(format!("Max: {:.3} ms", row.maximum_ms));
-            ui.text(format!("Calls/frame: {:.1}", row.calls));
-            if let Some(percent) = percent {
-                ui.text(format!("{percent:.1}% of GPU frame"));
-            }
-        });
-    }
+fn draw_timing_tooltip(response: egui::Response, row: &TimingRow, percent: Option<f64>) {
+    response.on_hover_ui(|ui| {
+        ui.label(format!("Max: {:.3} ms", row.maximum_ms));
+        ui.label(format!("Calls/frame: {:.1}", row.calls));
+        if let Some(percent) = percent {
+            ui.label(format!("{percent:.1}% of GPU frame"));
+        }
+    });
 }
 
 fn frame_row(rows: &[TimingRow]) -> Option<&TimingRow> {

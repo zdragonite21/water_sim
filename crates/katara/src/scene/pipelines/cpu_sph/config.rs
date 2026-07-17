@@ -48,14 +48,14 @@ pub struct Config {
 }
 
 impl Inspect for Config {
-    fn inspect(&mut self, ui: &imgui::Ui) {
-        ui.text("Simulation");
+    fn inspect(&mut self, ui: &mut egui::Ui) {
+        ui.label("Simulation");
         self.sim.inspect(ui);
         ui.separator();
-        ui.text("Rendering");
+        ui.label("Rendering");
         self.render.inspect(ui);
         ui.separator();
-        ui.text("Debug Overlay");
+        ui.label("Debug Overlay");
         self.debug.inspect(ui);
     }
 }

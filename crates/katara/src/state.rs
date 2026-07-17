@@ -165,7 +165,7 @@ impl State {
         }
     }
 
-    pub fn handle_event<T>(&mut self, event: &winit::event::Event<T>) {
+    pub fn handle_event(&mut self, event: &WindowEvent) {
         self.gui.handle_event(&self.window, event);
     }
 
@@ -359,8 +359,11 @@ impl State {
 
         self.gui.render(
             self.frame_clock.dt,
+            &self.device,
+            &self.queue,
             encoder,
             &view,
+            [output.texture.width(), output.texture.height()],
             &self.window,
             self.camera.config_mut(),
             self.scene.config_mut(),

@@ -1,5 +1,5 @@
 pub trait Inspect {
-    fn inspect(&mut self, ui: &imgui::Ui);
+    fn inspect(&mut self, ui: &mut egui::Ui);
 }
 
 macro_rules! inspect_config {
@@ -44,7 +44,7 @@ macro_rules! inspect_config {
         }
 
         impl crate::inspect::Inspect for $name {
-            fn inspect(&mut self, ui: &imgui::Ui) {
+            fn inspect(&mut self, ui: &mut egui::Ui) {
                 $crate::inspect::inspect_config_draw_fields!(
                     ui,
                     self,
@@ -152,19 +152,27 @@ macro_rules! inspect_config_draw_fields {
         (checkbox, bool, $next_field:ident, $next_default:expr, [$($next_extra:tt)*])
         $($rest:tt)*
     ) => {
-        $crate::inspect::inspect_config_draw_field!(
-            $ui,
-            $self,
-            checkbox,
-            bool,
-            $field,
-            $default $($extra)*
-        );
-        $ui.same_line();
+        $ui.horizontal(|$ui| {
+            $crate::inspect::inspect_config_draw_field!(
+                $ui,
+                $self,
+                checkbox,
+                bool,
+                $field,
+                $default $($extra)*
+            );
+            $crate::inspect::inspect_config_draw_field!(
+                $ui,
+                $self,
+                checkbox,
+                bool,
+                $next_field,
+                $next_default $($next_extra)*
+            );
+        });
         $crate::inspect::inspect_config_draw_fields!(
             $ui,
             $self,
-            (checkbox, bool, $next_field, $next_default, [$($next_extra)*])
             $($rest)*
         );
     };
@@ -188,102 +196,167 @@ macro_rules! inspect_config_draw_fields {
 
 macro_rules! inspect_config_draw_field {
     ($ui:ident, $self:ident, slider, f32, $field:ident, $default:expr, $min:expr, $max:expr) => {
-        $ui.slider(stringify!($field), $min, $max, &mut $self.$field);
+        $ui.add(egui::Slider::new(&mut $self.$field, $min..=$max).text(stringify!($field)));
     };
     ($ui:ident, $self:ident, slider, f32, $field:ident, $default:expr) => {
         let slider_range = (2.0 * ($default as f32).abs()).max(1.0);
-        $ui.slider(
-            stringify!($field),
-            -slider_range,
-            slider_range,
-            &mut $self.$field,
+        $ui.add(
+            egui::Slider::new(&mut $self.$field, -slider_range..=slider_range)
+                .text(stringify!($field)),
         );
     };
     ($ui:ident, $self:ident, slider, u32, $field:ident, $default:expr, $min:expr, $max:expr) => {
-        $ui.slider(stringify!($field), $min, $max, &mut $self.$field);
+        $ui.add(egui::Slider::new(&mut $self.$field, $min..=$max).text(stringify!($field)));
     };
     ($ui:ident, $self:ident, slider, u32, $field:ident, $default:expr) => {
         let slider_range = (2.0 * ($default as f32).abs()).max(1.0) as u32;
-        $ui.slider(stringify!($field), 0, slider_range, &mut $self.$field);
+        $ui.add(egui::Slider::new(&mut $self.$field, 0..=slider_range).text(stringify!($field)));
     };
     ($ui:ident, $self:ident, slider, i32, $field:ident, $default:expr, $min:expr, $max:expr) => {
-        $ui.slider(stringify!($field), $min, $max, &mut $self.$field);
+        $ui.add(egui::Slider::new(&mut $self.$field, $min..=$max).text(stringify!($field)));
     };
     ($ui:ident, $self:ident, slider, i32, $field:ident, $default:expr) => {
         let slider_range = (2.0 * ($default as f32).abs()).max(1.0) as i32;
-        $ui.slider(
-            stringify!($field),
-            -slider_range,
-            slider_range,
-            &mut $self.$field,
+        $ui.add(
+            egui::Slider::new(&mut $self.$field, -slider_range..=slider_range)
+                .text(stringify!($field)),
         );
     };
     ($ui:ident, $self:ident, drag, f32, $field:ident, $default:expr) => {
-        imgui::Drag::<f32, _>::new(stringify!($field)).build($ui, &mut $self.$field);
+        $crate::inspect::drag_value($ui, stringify!($field), &mut $self.$field, 1.0, None);
     };
     ($ui:ident, $self:ident, drag, f32, $field:ident, $default:expr, $speed:expr) => {
-        imgui::Drag::<f32, _>::new(stringify!($field))
-            .speed($speed as f32)
-            .build($ui, &mut $self.$field);
+        $crate::inspect::drag_value(
+            $ui,
+            stringify!($field),
+            &mut $self.$field,
+            $speed as f64,
+            None,
+        );
     };
     ($ui:ident, $self:ident, drag, f32, $field:ident, $default:expr, $min:expr, $max:expr) => {
         let drag_speed = (($max as f32) - ($min as f32)).abs() / 100.0;
-        imgui::Drag::<f32, _>::new(stringify!($field))
-            .speed(drag_speed)
-            .range($min, $max)
-            .build($ui, &mut $self.$field);
+        $crate::inspect::drag_value(
+            $ui,
+            stringify!($field),
+            &mut $self.$field,
+            drag_speed as f64,
+            Some($min..=$max),
+        );
     };
     ($ui:ident, $self:ident, drag, u32, $field:ident, $default:expr) => {
-        imgui::Drag::<u32, _>::new(stringify!($field)).build($ui, &mut $self.$field);
+        $crate::inspect::drag_value($ui, stringify!($field), &mut $self.$field, 1.0, None);
     };
     ($ui:ident, $self:ident, drag, u32, $field:ident, $default:expr, $speed:expr) => {
-        imgui::Drag::<u32, _>::new(stringify!($field))
-            .speed($speed as f32)
-            .build($ui, &mut $self.$field);
+        $crate::inspect::drag_value(
+            $ui,
+            stringify!($field),
+            &mut $self.$field,
+            $speed as f64,
+            None,
+        );
     };
     ($ui:ident, $self:ident, drag, u32, $field:ident, $default:expr, $min:expr, $max:expr) => {
         let drag_speed = (($max as f32) - ($min as f32)).abs() / 100.0;
-        imgui::Drag::<u32, _>::new(stringify!($field))
-            .speed(drag_speed)
-            .range($min, $max)
-            .build($ui, &mut $self.$field);
+        $crate::inspect::drag_value(
+            $ui,
+            stringify!($field),
+            &mut $self.$field,
+            drag_speed as f64,
+            Some($min..=$max),
+        );
     };
     ($ui:ident, $self:ident, drag, i32, $field:ident, $default:expr) => {
-        imgui::Drag::<i32, _>::new(stringify!($field)).build($ui, &mut $self.$field);
+        $crate::inspect::drag_value($ui, stringify!($field), &mut $self.$field, 1.0, None);
     };
     ($ui:ident, $self:ident, drag, i32, $field:ident, $default:expr, $speed:expr) => {
-        imgui::Drag::<i32, _>::new(stringify!($field))
-            .speed($speed as f32)
-            .build($ui, &mut $self.$field);
+        $crate::inspect::drag_value(
+            $ui,
+            stringify!($field),
+            &mut $self.$field,
+            $speed as f64,
+            None,
+        );
     };
     ($ui:ident, $self:ident, drag, i32, $field:ident, $default:expr, $min:expr, $max:expr) => {
         let drag_speed = (($max as f32) - ($min as f32)).abs() / 100.0;
-        imgui::Drag::<i32, _>::new(stringify!($field))
-            .speed(drag_speed)
-            .range($min, $max)
-            .build($ui, &mut $self.$field);
+        $crate::inspect::drag_value(
+            $ui,
+            stringify!($field),
+            &mut $self.$field,
+            drag_speed as f64,
+            Some($min..=$max),
+        );
     };
     ($ui:ident, $self:ident, vector3, [f32; 3], $field:ident, $default:expr) => {
-        imgui::Drag::<f32, _>::new(stringify!($field)).build_array($ui, &mut $self.$field);
+        $crate::inspect::drag_vector3($ui, stringify!($field), &mut $self.$field, 1.0, None);
     };
     ($ui:ident, $self:ident, vector3, [f32; 3], $field:ident, $default:expr, $speed:expr) => {
-        imgui::Drag::<f32, _>::new(stringify!($field))
-            .speed($speed as f32)
-            .build_array($ui, &mut $self.$field);
+        $crate::inspect::drag_vector3(
+            $ui,
+            stringify!($field),
+            &mut $self.$field,
+            $speed as f64,
+            None,
+        );
     };
     ($ui:ident, $self:ident, vector3, [f32; 3], $field:ident, $default:expr, $min:expr, $max:expr) => {
         let drag_speed = (($max as f32) - ($min as f32)).abs() / 100.0;
-        imgui::Drag::<f32, _>::new(stringify!($field))
-            .speed(drag_speed)
-            .range($min, $max)
-            .build_array($ui, &mut $self.$field);
+        $crate::inspect::drag_vector3(
+            $ui,
+            stringify!($field),
+            &mut $self.$field,
+            drag_speed as f64,
+            Some($min..=$max),
+        );
     };
     ($ui:ident, $self:ident, color4, [f32; 4], $field:ident, $default:expr) => {
-        $ui.color_edit4(stringify!($field), &mut $self.$field);
+        $ui.horizontal(|ui| {
+            ui.label(stringify!($field));
+            ui.color_edit_button_rgba_unmultiplied(&mut $self.$field);
+        });
     };
     ($ui:ident, $self:ident, checkbox, bool, $field:ident, $default:expr) => {
-        $ui.checkbox(stringify!($field), &mut $self.$field);
+        $ui.checkbox(&mut $self.$field, stringify!($field));
     };
+}
+
+pub fn drag_value<T: egui::emath::Numeric>(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &mut T,
+    speed: f64,
+    range: Option<std::ops::RangeInclusive<T>>,
+) {
+    ui.horizontal(|ui| {
+        ui.label(label);
+        let mut drag = egui::DragValue::new(value).speed(speed);
+        if let Some(range) = range {
+            drag = drag.range(range);
+        }
+        ui.add(drag);
+    });
+}
+
+pub fn drag_vector3(
+    ui: &mut egui::Ui,
+    label: &str,
+    value: &mut [f32; 3],
+    speed: f64,
+    range: Option<std::ops::RangeInclusive<f32>>,
+) {
+    ui.horizontal(|ui| {
+        ui.label(label);
+        ui.push_id(label, |ui| {
+            for component in value {
+                let mut drag = egui::DragValue::new(component).speed(speed);
+                if let Some(range) = range.clone() {
+                    drag = drag.range(range);
+                }
+                ui.add(drag);
+            }
+        });
+    });
 }
 
 pub(crate) use inspect_config;

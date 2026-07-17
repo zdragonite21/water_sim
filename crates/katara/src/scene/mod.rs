@@ -27,22 +27,26 @@ impl Default for SceneConfig {
 }
 
 impl Panel for SceneConfig {
-    fn draw(&mut self, ui: &imgui::Ui) {
-        let mut active_id = self.active_pipeline as usize;
-        ui.window("Scene")
-            .size([280.0, 125.0], imgui::Condition::FirstUseEver)
-            .build(|| {
-                ui.combo(
-                    "pipeline",
-                    &mut active_id,
-                    &PipelineId::ALL,
-                    |pipeline_id| pipeline_id.label().into(),
-                );
-                self.active_pipeline = PipelineId::ALL[active_id];
+    fn draw(&mut self, context: &egui::Context) {
+        egui::Window::new("Scene")
+            .default_size([190.0, 90.0])
+            .show(context, |ui| {
+                egui::ComboBox::from_label("pipeline")
+                    .selected_text(self.active_pipeline.label())
+                    .show_ui(ui, |ui| {
+                        for pipeline_id in PipelineId::ALL {
+                            ui.selectable_value(
+                                &mut self.active_pipeline,
+                                pipeline_id,
+                                pipeline_id.label(),
+                            );
+                        }
+                    });
                 ui.separator();
 
-                let _pipeline_id = ui.push_id(self.active_pipeline.as_str());
-                self.pipeline_configs.draw(ui, self.active_pipeline);
+                ui.push_id(self.active_pipeline.as_str(), |ui| {
+                    self.pipeline_configs.draw(ui, self.active_pipeline);
+                });
             });
     }
 }

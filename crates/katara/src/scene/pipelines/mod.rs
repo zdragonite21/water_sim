@@ -13,7 +13,7 @@ pub struct PipelineConfigs {
 }
 
 impl PipelineConfigs {
-    pub fn draw(&mut self, ui: &imgui::Ui, active_pipeline: PipelineId) {
+    pub fn draw(&mut self, ui: &mut egui::Ui, active_pipeline: PipelineId) {
         match active_pipeline {
             PipelineId::CpuSph => self.cpu_sph.inspect(ui),
             PipelineId::GpuSph => self.gpu_sph.inspect(ui),
@@ -88,7 +88,12 @@ impl ActivePipeline {
         }
     }
 
-    pub fn upload_frame(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, view_proj: &Matrix4<f32>) {
+    pub fn upload_frame(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        view_proj: &Matrix4<f32>,
+    ) {
         match self {
             Self::CpuSph(pipeline) => pipeline.upload_frame(queue, view_proj),
             Self::GpuSph(pipeline) => pipeline.upload_frame(device, queue, view_proj),

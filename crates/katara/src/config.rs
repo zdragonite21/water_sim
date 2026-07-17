@@ -59,10 +59,10 @@ inspect_config! {
 }
 
 impl Panel for CameraConfig {
-    fn draw(&mut self, ui: &imgui::Ui) {
-        ui.window("Camera")
-            .size([280.0, 145.0], imgui::Condition::FirstUseEver)
-            .build(|| {
+    fn draw(&mut self, context: &egui::Context) {
+        egui::Window::new("Camera")
+            .default_size([190.0, 90.0])
+            .show(context, |ui| {
                 self.inspect(ui);
             });
     }

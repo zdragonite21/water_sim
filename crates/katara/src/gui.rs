@@ -2,55 +2,61 @@ use crate::config::CameraConfig;
 use crate::debug_watch;
 use crate::profiling::Profiler;
 use crate::{scene::SceneConfig, scene::SceneStats};
+use egui::{Color32, Context, FontFamily, FontId, Frame, Id, Margin, RichText, TextStyle};
 use wgpu::{Device, Queue, TextureFormat};
-use winit::event::Event;
+use winit::event::WindowEvent;
 use winit::window::Window;
 
 pub struct Gui {
-    context: imgui::Context,
-    platform: imgui_winit_support::WinitPlatform,
-    renderer: imgui_wgpu::WgpuRenderer,
-
+    context: Context,
+    state: egui_winit::State,
+    renderer: egui_wgpu::Renderer,
     debug_text: DebugText,
 }
 
 impl Gui {
     pub fn new(
         device: &Device,
-        queue: &Queue,
+        _queue: &Queue,
         window: &Window,
         surface_format: TextureFormat,
     ) -> Self {
-        let mut imgui = imgui::Context::create();
-        let mut platform = imgui_winit_support::WinitPlatform::new(&mut imgui);
-        platform.attach_window(window, imgui_winit_support::HiDpiMode::Rounded, &mut imgui);
-
-        let renderer = imgui_wgpu::WgpuRenderer::new(
-            imgui_wgpu::WgpuInitInfo::new(device.clone(), queue.clone(), surface_format),
-            &mut imgui,
-        )
-        .expect("failed to initialize Dear ImGui renderer");
+        let context = Context::default();
+        apply_editor_style(&context);
+        let state = egui_winit::State::new(
+            context.clone(),
+            egui::ViewportId::ROOT,
+            window,
+            Some(window.scale_factor() as f32),
+            None,
+            None,
+        );
+        let renderer = egui_wgpu::Renderer::new(
+            device,
+            surface_format,
+            egui_wgpu::RendererOptions::default(),
+        );
 
         Self {
-            context: imgui,
-            platform,
+            context,
+            state,
             renderer,
             debug_text: DebugText::new(),
         }
     }
 
-    pub fn handle_event<T>(&mut self, window: &Window, event: &Event<T>) {
-        self.platform.handle_event(&mut self.context, window, event);
+    pub fn handle_event(&mut self, window: &Window, event: &WindowEvent) {
+        if self.state.on_window_event(window, event).repaint {
+            window.request_redraw();
+        }
     }
 
     pub fn wants_mouse(&self) -> bool {
-        let io = self.context.io();
-        io.want_capture_mouse()
+        self.context.egui_wants_pointer_input()
     }
 
     pub fn wants_keyboard(&self) -> bool {
-        let io = self.context.io();
-        io.want_capture_keyboard()
+        self.context.egui_wants_keyboard_input()
     }
 
     pub fn toggle_debug_text(&mut self) {
@@ -59,30 +65,47 @@ impl Gui {
 
     pub fn render(
         &mut self,
-        dt: instant::Duration,
+        _dt: instant::Duration,
+        device: &Device,
+        queue: &Queue,
         encoder: &mut wgpu::CommandEncoder,
         target_view: &wgpu::TextureView,
+        target_size: [u32; 2],
         window: &Window,
         camera_settings: &mut CameraConfig,
         scene_config: &mut SceneConfig,
         scene_stats: &SceneStats,
         profiler: &mut Profiler,
     ) -> anyhow::Result<()> {
-        self.context
-            .io_mut()
-            .set_delta_time(dt.max(instant::Duration::from_nanos(1)).as_secs_f32());
-        self.platform.prepare_frame(window, &mut self.context);
+        let input = self.state.take_egui_input(window);
+        let context = self.context.clone();
+        let output = context.run_ui(input, |ui| {
+            let context = ui.ctx().clone();
+            self.debug_text.draw(&context, scene_stats);
+            camera_settings.draw(&context);
+            scene_config.draw(&context);
+            profiler.draw(&context);
+        });
+        self.state
+            .handle_platform_output(window, output.platform_output);
 
-        let ui = self.context.frame();
+        for (id, image_delta) in &output.textures_delta.set {
+            self.renderer
+                .update_texture(device, queue, *id, image_delta);
+        }
 
-        self.debug_text.draw(ui, scene_stats);
-        camera_settings.draw(ui);
-        scene_config.draw(ui);
-        profiler.draw(ui);
+        let pixels_per_point = context.pixels_per_point();
+        let paint_jobs = context.tessellate(output.shapes, pixels_per_point);
+        let screen = egui_wgpu::ScreenDescriptor {
+            size_in_pixels: target_size,
+            pixels_per_point,
+        };
+        let command_buffers =
+            self.renderer
+                .update_buffers(device, queue, encoder, &paint_jobs, &screen);
+        queue.submit(command_buffers);
 
-        self.platform.prepare_render(&mut self.context, window);
-
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Debug GUI Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: target_view,
@@ -96,13 +119,57 @@ impl Gui {
             depth_stencil_attachment: None,
             ..Default::default()
         });
-
         self.renderer
-            .render_context(&mut self.context, &mut render_pass)
-            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+            .render(&mut render_pass.forget_lifetime(), &paint_jobs, &screen);
+
+        for id in &output.textures_delta.free {
+            self.renderer.free_texture(id);
+        }
 
         Ok(())
     }
+}
+
+fn apply_editor_style(context: &Context) {
+    let mut visuals = egui::Visuals::dark();
+    visuals.window_fill = Color32::from_rgba_unmultiplied(15, 15, 15, 220);
+    visuals.panel_fill = Color32::from_rgba_unmultiplied(15, 15, 15, 220);
+    visuals.faint_bg_color = Color32::from_rgb(25, 25, 25);
+    visuals.extreme_bg_color = Color32::from_rgb(10, 10, 10);
+    visuals.selection.bg_fill = Color32::from_rgb(66, 100, 150);
+    visuals.widgets.inactive.bg_fill = Color32::from_rgb(45, 45, 48);
+    visuals.widgets.hovered.bg_fill = Color32::from_rgb(65, 65, 70);
+    visuals.widgets.active.bg_fill = Color32::from_rgb(75, 105, 150);
+    visuals.window_corner_radius = egui::CornerRadius::ZERO;
+    visuals.window_shadow = egui::epaint::Shadow::NONE;
+    context.set_visuals(visuals);
+
+    let mut style = (*context.global_style()).clone();
+    style.text_styles = [
+        (TextStyle::Small, FontId::new(10.0, FontFamily::Proportional)),
+        (TextStyle::Body, FontId::new(10.0, FontFamily::Proportional)),
+        (
+            TextStyle::Button,
+            FontId::new(10.0, FontFamily::Proportional),
+        ),
+        (
+            TextStyle::Heading,
+            FontId::new(12.0, FontFamily::Proportional),
+        ),
+        (
+            TextStyle::Monospace,
+            FontId::new(10.0, FontFamily::Monospace),
+        ),
+    ]
+    .into();
+    style.spacing.window_margin = Margin::same(4);
+    style.spacing.item_spacing = egui::vec2(4.0, 2.0);
+    style.spacing.button_padding = egui::vec2(3.0, 1.0);
+    style.spacing.indent = 10.0;
+    style.spacing.interact_size = egui::vec2(24.0, 12.0);
+    style.spacing.slider_width = 70.0;
+    style.spacing.combo_width = 70.0;
+    context.set_global_style(style);
 }
 
 struct DebugText {
@@ -118,87 +185,90 @@ impl DebugText {
         self.open = !self.open;
     }
 
-    fn draw(&mut self, ui: &imgui::Ui, scene_stats: &SceneStats) {
-        let _window_bg = ui.push_style_color(imgui::StyleColor::WindowBg, [0.0, 0.0, 0.0, 0.0]);
-        let _border = ui.push_style_color(imgui::StyleColor::Border, [0.0, 0.0, 0.0, 0.0]);
-        let _padding = ui.push_style_var(imgui::StyleVar::WindowPadding([0.0, 0.0]));
-        let _border_size = ui.push_style_var(imgui::StyleVar::WindowBorderSize(0.0));
+    fn draw(&mut self, context: &Context, scene_stats: &SceneStats) {
+        let fps = context.input(|input| 1.0 / input.stable_dt.max(f32::EPSILON));
+        let mut rows = vec![DebugRow::new(format!("FPS: {fps:.1}"))];
 
-        ui.window("Debug Text")
-            .position([10.0, 10.0], imgui::Condition::Always)
-            .flags(
-                imgui::WindowFlags::NO_TITLE_BAR
-                    | imgui::WindowFlags::NO_RESIZE
-                    | imgui::WindowFlags::NO_SCROLLBAR
-                    | imgui::WindowFlags::NO_COLLAPSE
-                    | imgui::WindowFlags::ALWAYS_AUTO_RESIZE
-                    | imgui::WindowFlags::NO_BACKGROUND
-                    | imgui::WindowFlags::NO_SAVED_SETTINGS,
-            )
-            .build(|| {
-                draw_text_with_bg(ui, &format!("FPS: {:.1}", ui.io().framerate()));
+        if self.open {
+            if !scene_stats.pipeline.rows.is_empty() {
+                rows.push(DebugRow::new(format!("[{}]", scene_stats.pipeline.label)));
+                rows.extend(scene_stats.pipeline.rows.iter().cloned().map(DebugRow::new));
+            }
 
-                if self.open {
-                    // debug text from scene stats
-                    let mut rows = Vec::new();
+            let watches = debug_watch::snapshot();
+            let mut current_group: Option<&str> = None;
+            for (name, entry) in watches {
+                let (group, label) = name.split_once('.').unwrap_or(("misc", name));
 
-                    rows.extend(scene_stats.pipeline.rows.iter().cloned());
-                    if !rows.is_empty() {
-                        draw_text_with_bg(ui, &format!("[{}]", scene_stats.pipeline.label));
-                        for row in &rows {
-                            draw_text_with_bg(ui, row);
-                        }
-                    }
-
-                    // global debug "watches"
-                    let watches = debug_watch::snapshot();
-                    if !watches.is_empty() {
-                        let mut current_group: Option<&str> = None;
-                        for (name, entry) in watches {
-                            let (group, label) = name.split_once('.').unwrap_or(("misc", name));
-
-                            if current_group != Some(group) {
-                                // section header
-                                current_group = Some(group);
-                                draw_text_with_bg(ui, &format!("[{}]", group));
-                            }
-
-                            draw_text_with_bg(ui, &format!("{label}: {}", entry.value));
-
-                            if ui.is_item_hovered() {
-                                ui.tooltip(|| {
-                                    ui.text(format!(
-                                        "{}:{}\nlast seen frame: {}",
-                                        entry.file, entry.line, entry.last_seen_frame
-                                    ));
-                                });
-                            }
-                        }
-                    }
+                if current_group != Some(group) {
+                    current_group = Some(group);
+                    rows.push(DebugRow::new(format!("[{group}]")));
                 }
+
+                rows.push(DebugRow {
+                    text: format!("{label}: {}", entry.value),
+                    tooltip: Some(format!(
+                        "{}:{}\nlast seen frame: {}",
+                        entry.file, entry.line, entry.last_seen_frame
+                    )),
+                });
+            }
+        }
+
+
+        let font = FontId::new(10.0, FontFamily::Proportional);
+        let width = context.fonts_mut(|fonts| {
+            rows.iter()
+                .map(|row| {
+                    fonts
+                        .layout_no_wrap(row.text.clone(), font.clone(), Color32::WHITE)
+                        .size()
+                        .x
+                })
+                .fold(0.0, f32::max)
+        }) + 4.0;
+
+        egui::Area::new(Id::new("Debug Text"))
+            .fixed_pos(egui::pos2(10.0, 10.0))
+            .order(egui::Order::Foreground)
+            .show(context, |ui| {
+                Frame::NONE.inner_margin(Margin::ZERO).show(ui, |ui| {
+                    ui.set_min_width(width);
+                    for row in rows {
+                        let response = draw_text_with_bg(ui, &row.text);
+                        if let Some(tooltip) = row.tooltip {
+                            response.on_hover_text(tooltip);
+                        }
+                    }
+                });
             });
     }
 }
 
-fn draw_text_with_bg(ui: &imgui::Ui, text: &str) {
-    let text_size = ui
-        .current_font()
-        .calc_text_size(ui.current_font_size(), f32::MAX, 0.0, text);
-    let cursor_pos = ui.cursor_screen_pos();
-    let padding = [4.0, 0.0];
-    let background_max = [
-        cursor_pos[0] + text_size[0] + padding[0],
-        cursor_pos[1] + text_size[1] + padding[1],
-    ];
+struct DebugRow {
+    text: String,
+    tooltip: Option<String>,
+}
 
-    ui.get_window_draw_list()
-        .add_rect(cursor_pos, background_max, [0.0, 0.0, 0.0, 127.0 / 255.0])
-        .filled(true)
-        .build();
+impl DebugRow {
+    fn new(text: String) -> Self {
+        Self {
+            text,
+            tooltip: None,
+        }
+    }
+}
 
-    ui.text(text);
+fn draw_text_with_bg(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    Frame::NONE
+        .fill(Color32::from_black_alpha(220))
+        .inner_margin(Margin::symmetric(2, 0))
+        .show(ui, |ui| {
+            ui.add(egui::Label::new(RichText::new(text)).extend())
+        })
+        .inner
 }
 
 pub trait Panel {
-    fn draw(&mut self, ui: &imgui::Ui);
+    fn draw(&mut self, context: &Context);
 }

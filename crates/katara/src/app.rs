@@ -2,7 +2,7 @@ use crate::{config::AppConfig, state::State};
 use std::sync::Arc;
 use winit::{
     application::ApplicationHandler,
-    event::{DeviceEvent, DeviceId, Event, WindowEvent},
+    event::{DeviceEvent, DeviceId, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
     window::Window,
 };
@@ -151,12 +151,7 @@ impl ApplicationHandler<State> for App {
             None => return,
         };
 
-        let event: Event<State> = Event::WindowEvent { window_id, event };
         state.handle_event(&event);
-
-        let Event::WindowEvent { window_id, event } = event else {
-            return;
-        };
 
         if window_id != state.window.id() {
             return;
