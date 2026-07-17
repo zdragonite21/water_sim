@@ -36,8 +36,14 @@ impl State {
     pub async fn new(window: Arc<Window>, app_config: &AppConfig) -> anyhow::Result<State> {
         let size = window.inner_size();
 
+        #[cfg(not(target_arch = "wasm32"))]
+        let backends = wgpu::Backends::VULKAN;
+
+        #[cfg(target_arch = "wasm32")]
+        let backends = wgpu::Backends::BROWSER_WEBGPU;
+
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::VULKAN,
+            backends,
             flags: Default::default(),
             memory_budget_thresholds: Default::default(),
             backend_options: Default::default(),

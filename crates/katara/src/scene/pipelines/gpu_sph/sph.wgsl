@@ -1,3 +1,5 @@
+const WORK_GROUP_SIZE: u32 = 128u;
+
 struct SimConfig {
     size: vec3<f32>,
     collision_damping: f32,
@@ -124,7 +126,7 @@ const LOOK_AHEAD_NUM = 120.0;
 const LOOK_AHEAD_FACTOR: f32 = 1.0 / LOOK_AHEAD_NUM;
 
 @compute
-@workgroup_size(64)
+@workgroup_size(WORK_GROUP_SIZE)
 fn upload_keys(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
@@ -160,7 +162,7 @@ fn upload_keys(
 // sort between passes
 
 @compute
-@workgroup_size(64)
+@workgroup_size(WORK_GROUP_SIZE)
 fn upload_start_indices(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
@@ -197,7 +199,7 @@ fn upload_start_indices(
 }
 
 @compute
-@workgroup_size(64)
+@workgroup_size(WORK_GROUP_SIZE)
 fn gather_particles(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
@@ -222,7 +224,7 @@ fn gather_particles(
 }
 
 @compute
-@workgroup_size(64)
+@workgroup_size(WORK_GROUP_SIZE)
 fn compute_density(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
@@ -285,7 +287,7 @@ fn compute_density(
 // sync computed density globally
 
 @compute
-@workgroup_size(64)
+@workgroup_size(WORK_GROUP_SIZE)
 fn pressure_viscosity(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {
@@ -334,7 +336,6 @@ fn pressure_viscosity(
                     var other_predicted_density = (*r_pos_density)[other_idx];
                     var other_predicted = other_predicted_density.xyz;
                     var other_density = other_predicted_density.w;
-                    var other_vel = (*r_vel)[other_idx].xyz;
 
                     var other_cell = position_to_cell(other_predicted);
                     if any(other_cell != curr_cell) {
@@ -367,6 +368,7 @@ fn pressure_viscosity(
                         pressure_force += shared_pressure * dir * slope * config.mass / max(other_density, EPSILON);
 
                         // compute viscosity force
+                        var other_vel = (*r_vel)[other_idx].xyz;
                         var influence = viscosity_smoothing_kernel(dst);
                         var vel_diff = other_vel - vel;
 
@@ -394,7 +396,7 @@ fn pressure_viscosity(
 }
 
 @compute
-@workgroup_size(64)
+@workgroup_size(WORK_GROUP_SIZE)
 fn handle_collisions(
     @builtin(global_invocation_id) gid: vec3<u32>
 ) {

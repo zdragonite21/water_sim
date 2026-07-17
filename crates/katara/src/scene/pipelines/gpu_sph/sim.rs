@@ -10,7 +10,7 @@ use cgmath::{Point3, Vector3};
 use wgpu::util::DeviceExt;
 use wgpu_sort::{GPUSorter, SortBuffers};
 
-const WORKGROUP_SIZE: usize = 64;
+const WORKGROUP_SIZE: usize = 128;
 
 fn create_layout(
     device: &wgpu::Device,

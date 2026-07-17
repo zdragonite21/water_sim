@@ -45,13 +45,13 @@ velocity_color = [
 
 [scene.pipeline_configs.gpu_sph.sim]
 gravity = 9.0
-num_particles = 100000
+num_particles = 600000
 size = [
-    15.0,
-    10.0,
-    10.0,
+    38.0,
+    12.0,
+    18.0,
 ]
-smoothing_radius = 0.28999999165534973
+smoothing_radius = 0.30000001192092896
 target_density = 19.610000610351563
 pressure_multiplier = 247.60000610351563
 viscosity_strength = 1.5
@@ -66,7 +66,7 @@ enabled = true
 xray = false
 velocity = false
 bounds = true
-grid = true
+grid = false
 vector_width = 1.3070000410079956
 vector_scale = 0.1599999964237213
 velocity_color = [
