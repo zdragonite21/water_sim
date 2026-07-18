@@ -88,7 +88,7 @@ impl Scene {
         Ok(Self {
             pipeline,
             gpu_recorder,
-            paused: true,
+            paused: false,
             accumulator: instant::Duration::ZERO,
             fixed_dt: instant::Duration::from_secs_f32(1.0 / Self::SIM_HZ as f32),
             config: scene_config.clone(),

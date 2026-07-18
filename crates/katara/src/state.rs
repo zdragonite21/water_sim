@@ -292,6 +292,8 @@ impl State {
                 self.gui.toggle_controls();
                 true
             }
+            #[cfg(target_arch = "wasm32")]
+            KeyCode::Escape => self.gui.hide_controls(),
             KeyCode::F2 => {
                 self.gui.toggle_debug_text();
                 true

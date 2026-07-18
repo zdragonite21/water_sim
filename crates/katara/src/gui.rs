@@ -139,6 +139,11 @@ impl Gui {
 
         Ok(())
     }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn hide_controls(&mut self) -> bool {
+        self.controls.hide()
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -162,7 +167,7 @@ impl ControlsHelp {
             .order(egui::Order::Foreground)
             .show(context, |ui| {
                 Frame::NONE
-                    .fill(Color32::from_black_alpha(220))
+                    .fill(Color32::from_black_alpha(240))
                     .inner_margin(Margin::symmetric(8, 4))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
@@ -187,11 +192,7 @@ impl ControlsHelp {
             .resizable(false)
             .open(&mut open)
             .show(context, |ui| {
-                ui.label(
-                    RichText::new("Hotkeys!")
-                        .size(16.0)
-                        .strong(),
-                );
+                ui.label(RichText::new("Hotkeys!").size(16.0).strong());
                 ui.add_space(6.0);
 
                 egui::Grid::new("Controls Grid")
@@ -216,6 +217,12 @@ impl ControlsHelp {
 
         self.open = open;
     }
+
+    fn hide(&mut self) -> bool {
+        let was_open = self.open;
+        self.open = false;
+        was_open
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -227,8 +234,8 @@ fn control_row(ui: &mut egui::Ui, input: &str, action: &str) {
 
 fn apply_editor_style(context: &Context) {
     let mut visuals = egui::Visuals::dark();
-    visuals.window_fill = Color32::from_rgba_unmultiplied(15, 15, 15, 220);
-    visuals.panel_fill = Color32::from_rgba_unmultiplied(15, 15, 15, 220);
+    visuals.window_fill = Color32::from_rgba_unmultiplied(15, 15, 15, 240);
+    visuals.panel_fill = Color32::from_rgba_unmultiplied(15, 15, 15, 240);
     visuals.faint_bg_color = Color32::from_rgb(25, 25, 25);
     visuals.extreme_bg_color = Color32::from_rgb(10, 10, 10);
     visuals.selection.bg_fill = Color32::from_rgb(66, 100, 150);
@@ -237,11 +244,15 @@ fn apply_editor_style(context: &Context) {
     visuals.widgets.active.bg_fill = Color32::from_rgb(75, 105, 150);
     visuals.window_corner_radius = egui::CornerRadius::ZERO;
     visuals.window_shadow = egui::epaint::Shadow::NONE;
+    visuals.widgets.noninteractive.fg_stroke.color = Color32::from_rgb(235, 235, 235);
     context.set_visuals(visuals);
 
     let mut style = (*context.global_style()).clone();
     style.text_styles = [
-        (TextStyle::Small, FontId::new(10.0, FontFamily::Proportional)),
+        (
+            TextStyle::Small,
+            FontId::new(10.0, FontFamily::Proportional),
+        ),
         (TextStyle::Body, FontId::new(10.0, FontFamily::Proportional)),
         (
             TextStyle::Button,
@@ -310,7 +321,6 @@ impl DebugText {
             }
         }
 
-
         let font = FontId::new(10.0, FontFamily::Proportional);
         let width = context.fonts_mut(|fonts| {
             rows.iter()
@@ -356,7 +366,7 @@ impl DebugRow {
 
 fn draw_text_with_bg(ui: &mut egui::Ui, text: &str) -> egui::Response {
     Frame::NONE
-        .fill(Color32::from_black_alpha(220))
+        .fill(Color32::from_black_alpha(240))
         .inner_margin(Margin::symmetric(2, 0))
         .show(ui, |ui| {
             ui.add(egui::Label::new(RichText::new(text)).extend())
