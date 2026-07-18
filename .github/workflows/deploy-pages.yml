@@ -10,6 +10,10 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -21,8 +25,13 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
 
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
       - name: Install Trunk
-        run: cargo install trunk --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: trunk
 
       - name: Build
         working-directory: crates/katara
