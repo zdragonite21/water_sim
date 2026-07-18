@@ -6,6 +6,8 @@ use winit::dpi::PhysicalPosition;
 use winit::event::*;
 use winit::keyboard::KeyCode;
 
+const MOUSE_SENS_SCALE: f32 = 0.02;
+
 use crate::config::CameraConfig;
 
 pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::from_cols(
@@ -211,8 +213,9 @@ impl CameraController {
         camera.velocity *= (-camera.settings.damping * dt).exp();
         camera.position += camera.velocity * dt;
 
-        camera.yaw += Rad(-self.rot_hor) * camera.settings.mouse_sens;
-        camera.pitch += Rad(-self.rot_vert) * camera.settings.mouse_sens;
+        let mouse_sens = camera.settings.mouse_sens * MOUSE_SENS_SCALE;
+        camera.yaw += Rad(-self.rot_hor) * mouse_sens;
+        camera.pitch += Rad(-self.rot_vert) * mouse_sens;
         camera.pitch = Rad(camera.pitch.0.clamp(-SAFE_FRAC_PI_2, SAFE_FRAC_PI_2));
 
         self.reset_frame_input();

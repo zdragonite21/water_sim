@@ -29,7 +29,7 @@ inspect_config! {
     #[serde(default)]
     pub struct SimConfig {
         drag gravity: f32 = 9.81, 0.1;
-        drag num_particles: u32 = 10000, 1000, 100000;
+        drag num_particles: u32 = 10000, 1000, 1000000;
         vector3 size: [f32; 3] = [20.0, 20.0, 1.0];
         drag smoothing_radius: f32 = 0.5, 0.01, 5.0;
         drag target_density: f32 = 1.0, 0.5, 20.0;

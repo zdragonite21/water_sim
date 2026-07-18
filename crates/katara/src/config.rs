@@ -57,7 +57,7 @@ inspect_config! {
     pub struct CameraConfig {
         slider accel: f32 = 100.0, 0.0, 300.0;
         slider damping: f32 = 5.0, 0.0, 20.0;
-        slider mouse_sens: f32 = 0.005, 0.001, 0.02;
+        slider mouse_sens: f32 = 0.25, 0.0, 1.0;
         slider scroll_sens: f32 = 0.1, 0.01, 2.0;
     }
 }

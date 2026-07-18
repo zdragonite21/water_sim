@@ -287,6 +287,11 @@ impl State {
         };
 
         match key {
+            #[cfg(target_arch = "wasm32")]
+            KeyCode::Slash => {
+                self.gui.toggle_controls();
+                true
+            }
             KeyCode::F2 => {
                 self.gui.toggle_debug_text();
                 true
