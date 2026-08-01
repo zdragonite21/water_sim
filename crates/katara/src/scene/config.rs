@@ -1,4 +1,5 @@
 use crate::inspect::{Inspect, inspect_config};
+use crate::gui::Panel;
 use serde::{Deserialize, Serialize};
 
 inspect_config! {
@@ -42,13 +43,13 @@ inspect_config! {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
-pub struct Config {
+pub struct SceneConfig {
     pub sim: SimConfig,
     pub render: RenderConfig,
     pub debug: DebugConfig,
 }
 
-impl Inspect for Config {
+impl Inspect for SceneConfig {
     fn inspect(&mut self, ui: &mut egui::Ui) {
         ui.label("Simulation");
         self.sim.inspect(ui);
@@ -58,5 +59,17 @@ impl Inspect for Config {
         ui.separator();
         ui.label("Debug Overlay");
         self.debug.inspect(ui);
+    }
+}
+
+impl Panel for SceneConfig {
+    fn draw(&mut self, context: &egui::Context) {
+        egui::Window::new("Scene")
+            .default_size([190.0, 90.0])
+            .show(context, |ui| {
+                ui.push_id("mpm", |ui| {
+                    self.inspect(ui);
+                });
+            });
     }
 }

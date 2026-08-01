@@ -8,42 +8,7 @@ scroll_sens = 0.10000000149011612
 width = 1600
 height = 1128
 
-[scene]
-active_pipeline = "gpu_sph"
-
-[scene.pipeline_configs.cpu_sph.sim]
-gravity = 12.0
-num_particles = 4032
-size = [
-    16.0,
-    10.0,
-    1.0,
-]
-smoothing_radius = 0.3499999940395355
-target_density = 50.0
-pressure_multiplier = 403.6400146484375
-viscosity_strength = 2.0
-mass = 1.0
-damping = 0.05000000074505806
-
-[scene.pipeline_configs.cpu_sph.render]
-particle_size = 0.11100000143051147
-
-[scene.pipeline_configs.cpu_sph.debug]
-enabled = true
-velocity = false
-bounds = false
-grid = false
-vector_width = 1.3070000410079956
-vector_scale = 0.1599999964237213
-velocity_color = [
-    0.0,
-    0.501960813999176,
-    1.0,
-    1.0,
-]
-
-[scene.pipeline_configs.gpu_sph.sim]
+[scene.sim]
 gravity = 9.0
 num_particles = 100000
 size = [
@@ -58,10 +23,10 @@ viscosity_strength = 1.5
 mass = 0.10000000149011612
 damping = 0.05000000074505806
 
-[scene.pipeline_configs.gpu_sph.render]
+[scene.render]
 particle_size = 0.11999999731779099
 
-[scene.pipeline_configs.gpu_sph.debug]
+[scene.debug]
 enabled = true
 xray = false
 velocity = false

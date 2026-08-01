@@ -1,9 +1,12 @@
+#![allow(unused)]
+pub mod line;
+
 use crate::{
     render::{
         model::{Mesh, SimpleVertex, Vertex},
         texture::Texture,
     },
-    scene::debug::line::Line3d,
+    scene::line_renderer::line::Line3d,
 };
 use cgmath::{Matrix4, Point3, Vector4};
 use wgpu::util::DeviceExt;

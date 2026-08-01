@@ -1,63 +1,22 @@
-mod debug;
-mod pipelines;
+mod config;
+mod debug_overlay;
+mod line_renderer;
+mod renderer;
+mod sim;
 
-use crate::scene::pipelines::{PipelineConfigs, PipelineId};
-use crate::{
-    gui::Panel,
-    profiling::GpuFrameRecorder,
-    scene::pipelines::{ActivePipeline, PipelineStats},
-};
+use crate::profiling::GpuFrameRecorder;
 use cgmath::Matrix4;
-use serde::{Deserialize, Serialize};
+use debug_overlay::DebugOverlay;
+use renderer::BillboardRenderer;
+use sim::Sim;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct SceneConfig {
-    pub active_pipeline: PipelineId,
-    pub pipeline_configs: PipelineConfigs,
-}
-
-impl Default for SceneConfig {
-    fn default() -> Self {
-        Self {
-            active_pipeline: PipelineId::default(),
-            pipeline_configs: PipelineConfigs::default(),
-        }
-    }
-}
-
-impl Panel for SceneConfig {
-    fn draw(&mut self, context: &egui::Context) {
-        egui::Window::new("Scene")
-            .default_size([190.0, 90.0])
-            .show(context, |ui| {
-                egui::ComboBox::from_label("pipeline")
-                    .selected_text(self.active_pipeline.label())
-                    .show_ui(ui, |ui| {
-                        for pipeline_id in PipelineId::ALL {
-                            ui.selectable_value(
-                                &mut self.active_pipeline,
-                                pipeline_id,
-                                pipeline_id.label(),
-                            );
-                        }
-                    });
-                ui.separator();
-
-                ui.push_id(self.active_pipeline.as_str(), |ui| {
-                    self.pipeline_configs.draw(ui, self.active_pipeline);
-                });
-            });
-    }
-}
-
-pub struct SceneStats {
-    pub pipeline: PipelineStats,
-}
+pub use config::SceneConfig;
 
 pub struct Scene {
-    pipeline: ActivePipeline,
-    gpu_recorder: Option<GpuFrameRecorder>,
+    sim: Sim,
+    renderer: BillboardRenderer,
+    debug_overlay: DebugOverlay,
+    
     paused: bool,
     accumulator: instant::Duration,
     fixed_dt: instant::Duration,
@@ -73,25 +32,30 @@ impl Scene {
         device: &wgpu::Device,
         surface_config: &wgpu::SurfaceConfiguration,
         cam_bind_group_layout: &wgpu::BindGroupLayout,
-        scene_config: &SceneConfig,
+        config: &SceneConfig,
         gpu_recorder: Option<GpuFrameRecorder>,
     ) -> anyhow::Result<Self> {
-        let pipeline = ActivePipeline::new(
+        let sim = Sim::new(device, &config.sim, gpu_recorder.clone());
+
+        let renderer = BillboardRenderer::new(
             device,
             surface_config,
             cam_bind_group_layout,
-            scene_config.active_pipeline,
-            &scene_config.pipeline_configs,
-            gpu_recorder.clone(),
+            &config.render,
+            sim.velocity_buffers(),
         )?;
 
+        let debug_overlay =
+            DebugOverlay::new(device, surface_config, cam_bind_group_layout, &config.debug)?;
+
         Ok(Self {
-            pipeline,
-            gpu_recorder,
+            sim,
+            renderer,
+            debug_overlay,
             paused: false,
             accumulator: instant::Duration::ZERO,
             fixed_dt: instant::Duration::from_secs_f32(1.0 / Self::SIM_HZ as f32),
-            config: scene_config.clone(),
+            config: config.clone(),
             steps: 0,
         })
     }
@@ -100,9 +64,10 @@ impl Scene {
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        surface_config: &wgpu::SurfaceConfiguration,
+        config: &wgpu::SurfaceConfiguration,
     ) {
-        self.pipeline.resize(device, queue, surface_config);
+        self.renderer.resize(device, config);
+        self.debug_overlay.resize(queue, config);
     }
 
     pub fn toggle_pause(&mut self) {
@@ -125,7 +90,7 @@ impl Scene {
             let mut steps = 0;
 
             while self.accumulator >= self.fixed_dt && steps < Self::MAX_STEPS {
-                self.pipeline.update_fixed(encoder, queue, self.fixed_dt);
+                self.update_fixed(encoder, queue);
                 self.accumulator -= self.fixed_dt;
                 steps += 1;
             }
@@ -135,10 +100,14 @@ impl Scene {
             }
         } else {
             for _ in 0..self.steps {
-                self.pipeline.update_fixed(encoder, queue, self.fixed_dt);
+                self.update_fixed(encoder, queue);
             }
             self.steps = 0;
         }
+    }
+
+    pub fn update_fixed(&mut self, encoder: &mut wgpu::CommandEncoder, queue: &wgpu::Queue) {
+        self.sim.dispatch(encoder, queue);
     }
 
     pub fn step(&mut self) {
@@ -146,40 +115,24 @@ impl Scene {
     }
 
     pub fn reset(&mut self, device: &wgpu::Device) {
-        self.pipeline.reset(device);
+        self.sim.reset(device);
+        self.renderer.reset(device, self.sim.velocity_buffers());
     }
 
     pub fn config_mut(&mut self) -> &mut SceneConfig {
         &mut self.config
     }
 
-    pub fn sync_pipeline(
+    pub fn sync_config(
         &mut self,
-        device: &wgpu::Device,
         queue: &wgpu::Queue,
-        surface_config: &wgpu::SurfaceConfiguration,
-        cam_bind_group_layout: &wgpu::BindGroupLayout,
-    ) -> anyhow::Result<bool> {
-        if self.pipeline.id() != self.config.active_pipeline {
-            self.pipeline = ActivePipeline::new(
-                device,
-                surface_config,
-                cam_bind_group_layout,
-                self.config.active_pipeline,
-                &self.config.pipeline_configs,
-                self.gpu_recorder.clone(),
-            )?;
-            self.paused = true;
-            Ok(true)
-        } else {
-            self.pipeline.update_config(
-                device,
-                queue,
-                &self.config.pipeline_configs,
-                self.fixed_dt,
-            );
-            Ok(false)
-        }
+    ) {
+        self.sim.update_config(&self.config.sim);
+        self.sim.update_uniforms(queue, self.fixed_dt);
+        self.renderer.update_config(&self.config.render);
+        self.renderer
+            .update_uniforms(queue, self.config.sim.target_density);
+        self.debug_overlay.update_config(&self.config.debug);
     }
 
     pub fn current_config(&self) -> SceneConfig {
@@ -188,7 +141,7 @@ impl Scene {
 
     pub fn stats(&self) -> SceneStats {
         SceneStats {
-            pipeline: self.pipeline.stats(),
+            sim: self.sim.get_stats(),
         }
     }
 
@@ -198,8 +151,23 @@ impl Scene {
         target_view: &wgpu::TextureView,
         camera_bind_group: &wgpu::BindGroup,
     ) -> anyhow::Result<()> {
-        self.pipeline
-            .render(encoder, target_view, camera_bind_group)
+        self.renderer.draw(
+            encoder,
+            self.sim.particle_buffer(),
+            self.sim.num_particles(),
+            target_view,
+            camera_bind_group,
+            self.sim.velocity_buffer_index(),
+        )?;
+
+        self.debug_overlay.draw(
+            encoder,
+            target_view,
+            self.renderer.depth_texture_view(),
+            camera_bind_group,
+        )?;
+
+        Ok(())
     }
 
     pub fn upload_frame(
@@ -208,6 +176,14 @@ impl Scene {
         queue: &wgpu::Queue,
         view_proj: &Matrix4<f32>,
     ) {
-        self.pipeline.upload_frame(device, queue, view_proj);
+        let size = self.sim.bounds();
+        let radius = self.sim.smoothing_radius();
+
+        self.debug_overlay
+            .upload_config(device, queue, view_proj, &size, radius);
     }
+}
+
+pub struct SceneStats {
+    pub sim: sim::Stats,
 }

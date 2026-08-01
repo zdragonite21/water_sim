@@ -17,9 +17,6 @@ use crate::{
 };
 use crate::{frame_clock::FrameClock, gui::Gui};
 
-#[cfg(target_arch = "wasm32")]
-const CAMERA_MOUSE_BUTTON: MouseButton = MouseButton::Left;
-#[cfg(not(target_arch = "wasm32"))]
 const CAMERA_MOUSE_BUTTON: MouseButton = MouseButton::Right;
 
 pub struct State {
@@ -42,14 +39,8 @@ impl State {
     pub async fn new(window: Arc<Window>, app_config: &AppConfig) -> anyhow::Result<State> {
         let size = window.inner_size();
 
-        #[cfg(not(target_arch = "wasm32"))]
-        let backends = wgpu::Backends::VULKAN;
-
-        #[cfg(target_arch = "wasm32")]
-        let backends = wgpu::Backends::BROWSER_WEBGPU;
-
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends,
+            backends: wgpu::Backends::VULKAN,
             flags: Default::default(),
             memory_budget_thresholds: Default::default(),
             backend_options: Default::default(),
@@ -76,8 +67,7 @@ impl State {
         );
 
         let profiling_features = wgpu_profiler::GpuProfiler::ALL_WGPU_TIMER_FEATURES;
-        let gpu_profiling_supported =
-            !cfg!(target_arch = "wasm32") && adapter.features().contains(profiling_features);
+        let gpu_profiling_supported = adapter.features().contains(profiling_features);
         let required_features = if gpu_profiling_supported {
             profiling_features
         } else {
@@ -237,24 +227,18 @@ impl State {
                 self.camera.controller.handle_mouse_scroll(delta);
                 true
             }
-            WindowEvent::MouseInput {
-                state,
-                button,
-                ..
-            } if *button == CAMERA_MOUSE_BUTTON
-                && *state == ElementState::Pressed
-                && !self.gui_wants_mouse() =>
+            WindowEvent::MouseInput { state, button, .. }
+                if *button == CAMERA_MOUSE_BUTTON
+                    && *state == ElementState::Pressed
+                    && !self.gui_wants_mouse() =>
             {
                 self.set_camera_capture(true);
                 true
             }
-            WindowEvent::MouseInput {
-                state,
-                button,
-                ..
-            } if *button == CAMERA_MOUSE_BUTTON
-                && *state == ElementState::Released
-                && self.camera.controller.is_captured() =>
+            WindowEvent::MouseInput { state, button, .. }
+                if *button == CAMERA_MOUSE_BUTTON
+                    && *state == ElementState::Released
+                    && self.camera.controller.is_captured() =>
             {
                 self.set_camera_capture(false);
                 true
@@ -287,13 +271,6 @@ impl State {
         };
 
         match key {
-            #[cfg(target_arch = "wasm32")]
-            KeyCode::Slash => {
-                self.gui.toggle_controls();
-                true
-            }
-            #[cfg(target_arch = "wasm32")]
-            KeyCode::Escape => self.gui.hide_controls(),
             KeyCode::F2 => {
                 self.gui.toggle_debug_text();
                 true
@@ -363,12 +340,6 @@ impl State {
         return Ok((output, reconfigure_after_present, encoder));
     }
 
-    fn render_config(&self) -> wgpu::SurfaceConfiguration {
-        let mut config = self.config.clone();
-        config.format = self.render_format;
-        config
-    }
-
     fn update(&mut self, encoder: &mut wgpu::CommandEncoder, dt: instant::Duration) {
         self.camera.update(&self.queue, dt);
         self.scene.update(&self.queue, encoder, dt);
@@ -384,12 +355,10 @@ impl State {
         encoder: &mut wgpu::CommandEncoder,
         output: &wgpu::SurfaceTexture,
     ) -> anyhow::Result<()> {
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor {
-                format: Some(self.render_format),
-                ..Default::default()
-            });
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(self.render_format),
+            ..Default::default()
+        });
 
         let gpu = self.profiler.gpu_recorder();
         let render_result = gpu_profile!(gpu.as_ref(), encoder, "Particle render", {
@@ -450,14 +419,7 @@ impl State {
     fn profiled_frame(&mut self) -> anyhow::Result<()> {
         let (encoder, output, reconfigure_after_present, render_result) = {
             profiling::scope!("Update and command encoding");
-            if self.scene.sync_pipeline(
-                &self.device,
-                &self.queue,
-                &self.render_config(),
-                &self.camera.bind_group_layout,
-            )? {
-                self.reset_scene();
-            }
+            self.scene.sync_config(&self.queue);
 
             let (output, reconfigure_after_present, mut encoder) = self.begin_frame()?;
 

@@ -3,7 +3,7 @@ use crate::{
         model::{Mesh, SimpleVertex, Vertex},
         texture::Texture,
     },
-    scene::pipelines::gpu_sph::sim::ParticleRaw,
+    scene::sim::ParticleRaw,
 };
 
 use super::config::RenderConfig;

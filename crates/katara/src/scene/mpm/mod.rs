@@ -1,25 +1,20 @@
-mod config;
-mod debug_overlay;
-mod renderer;
-mod sim;
 
-use crate::{
-    profiling::GpuFrameRecorder,
-    scene::pipelines::{PipelineId, gpu_sph::debug_overlay::DebugOverlay},
-};
+use crate::profiling::GpuFrameRecorder;
 use cgmath::Matrix4;
+use debug_overlay::DebugOverlay;
 use renderer::BillboardRenderer;
-use sim::{Sim, Stats};
+use sim::Sim;
 
 pub use config::Config;
+pub use sim::Stats;
 
-pub struct Pipeline {
+pub struct Mpm {
     sim: Sim,
     renderer: BillboardRenderer,
     debug_overlay: DebugOverlay,
 }
 
-impl Pipeline {
+impl Mpm {
     pub fn new(
         device: &wgpu::Device,
         surface_config: &wgpu::SurfaceConfiguration,
@@ -95,10 +90,6 @@ impl Pipeline {
 
     pub fn stats(&self) -> Stats {
         self.sim.get_stats()
-    }
-
-    pub fn id(&self) -> PipelineId {
-        PipelineId::GpuSph
     }
 
     pub fn render(

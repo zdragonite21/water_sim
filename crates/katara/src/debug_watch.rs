@@ -1,3 +1,4 @@
+#![allow(unused)]
 use std::collections::BTreeMap;
 use std::sync::{LazyLock, Mutex};
 
@@ -53,10 +54,9 @@ pub fn begin_frame(frame: u64, paused: bool) {
 }
 
 pub fn clear() {
-    WATCHES.lock().unwrap().map.clear();
+    WATCHES.lock().unwrap().map.clear(); 
 }
 
-#[allow(unused)]
 #[macro_export]
 macro_rules! dwatch {
     ($name:literal, $fmt:literal, $($arg:tt)*) => {

@@ -1,6 +1,7 @@
 use crate::config::CameraConfig;
 use crate::debug_watch;
 use crate::profiling::Profiler;
+use crate::stats::DebugStats;
 use crate::{scene::SceneConfig, scene::SceneStats};
 use egui::{Color32, Context, FontFamily, FontId, Frame, Id, Margin, RichText, TextStyle};
 use wgpu::{Device, Queue, TextureFormat};
@@ -194,9 +195,11 @@ impl DebugText {
         let mut rows = vec![DebugRow::new(format!("FPS: {fps:.1}"))];
 
         if self.open {
-            if !scene_stats.pipeline.rows.is_empty() {
-                rows.push(DebugRow::new(format!("[{}]", scene_stats.pipeline.label)));
-                rows.extend(scene_stats.pipeline.rows.iter().cloned().map(DebugRow::new));
+            let mut sim_rows = Vec::new();
+            scene_stats.sim.append_debug_text_rows(&mut sim_rows);
+            if !sim_rows.is_empty() {
+                rows.push(DebugRow::new("Sim".to_string()));
+                rows.extend(sim_rows.iter().cloned().map(DebugRow::new));
             }
 
             let watches = debug_watch::snapshot();

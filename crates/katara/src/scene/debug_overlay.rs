@@ -1,6 +1,6 @@
 use super::config::DebugConfig;
 use crate::{
-    scene::debug::{line::LineBatch, line_renderer::LineRenderer},
+    scene::line_renderer::{line::LineBatch, LineRenderer},
     util::bounds::Bounds3,
 };
 use cgmath::{Matrix4, Point3, Vector3};
