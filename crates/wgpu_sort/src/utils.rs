@@ -126,10 +126,7 @@ async fn test_sort(sorter: &GPUSorter, device: &wgpu::Device, queue: &wgpu::Queu
         0..sort_buffers.keys_valid_size(),
     )
     .await;
-    sorted
-        .into_iter()
-        .zip(sorted_data)
-        .all(|(a, b)| a == b)
+    sorted.into_iter().zip(sorted_data).all(|(a, b)| a == b)
 }
 
 /// Function guesses the best subgroup size by testing the sorter with

@@ -317,7 +317,6 @@ impl GPUSorter {
 
         let internal_size = (RS_KEYVAL_SIZE + scatter_blocks_ru) * histo_size; // +1 safety
 
-        
         device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Internal radix sort buffer"),
             size: internal_size as u64,

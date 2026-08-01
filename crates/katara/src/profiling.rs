@@ -130,17 +130,19 @@ impl Profiler {
 
     pub fn resolve_gpu_queries(&mut self, encoder: &mut wgpu::CommandEncoder) {
         if self.frame_capturing
-            && let Some(gpu) = &self.gpu {
-                gpu.0.profiler.lock().unwrap().resolve_queries(encoder);
-            }
+            && let Some(gpu) = &self.gpu
+        {
+            gpu.0.profiler.lock().unwrap().resolve_queries(encoder);
+        }
     }
 
     pub fn finish_gpu_frame(&mut self) {
         if self.frame_capturing
             && let Some(gpu) = &self.gpu
-                && let Err(error) = gpu.0.profiler.lock().unwrap().end_frame() {
-                    log::warn!("Could not finish GPU profiler frame: {error}");
-                }
+            && let Err(error) = gpu.0.profiler.lock().unwrap().end_frame()
+        {
+            log::warn!("Could not finish GPU profiler frame: {error}");
+        }
     }
 
     pub fn finish_cpu_frame(&mut self) {
