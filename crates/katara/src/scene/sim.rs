@@ -425,7 +425,7 @@ impl Sorter {
     fn new(device: &wgpu::Device, num_particles: usize) -> Self {
         let sorter = GPUSorter::new(device, 32);
         let sort_buffers =
-            sorter.create_sort_buffers(&device, NonZeroU32::new(num_particles as u32).unwrap());
+            sorter.create_sort_buffers(device, NonZeroU32::new(num_particles as u32).unwrap());
 
         Self {
             sorter,

@@ -337,7 +337,7 @@ impl State {
                 label: Some("Render Encoder"),
             });
 
-        return Ok((output, reconfigure_after_present, encoder));
+        Ok((output, reconfigure_after_present, encoder))
     }
 
     fn update(&mut self, encoder: &mut wgpu::CommandEncoder, dt: instant::Duration) {

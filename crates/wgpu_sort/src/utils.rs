@@ -59,7 +59,7 @@ pub async fn download_buffer<T: Clone + bytemuck::Pod>(
     rx.receive().await.unwrap().unwrap();
 
     let data = buffer_slice.get_mapped_range();
-    return bytemuck::cast_slice(data.deref()).to_vec();
+    bytemuck::cast_slice(data.deref()).to_vec()
 }
 
 pub fn download_buffer2(buffer: &wgpu::Buffer, device: &wgpu::Device, queue: &wgpu::Queue) {
@@ -82,7 +82,7 @@ pub fn download_buffer2(buffer: &wgpu::Buffer, device: &wgpu::Device, queue: &wg
         .map_async(wgpu::MapMode::Read, .., move |result| {
             result.unwrap();
             let data: Vec<u32> =
-                bytemuck::cast_slice(&*download_buffer.get_mapped_range(..)).to_vec();
+                bytemuck::cast_slice(&download_buffer.get_mapped_range(..)).to_vec();
             let data = data.iter().take(3 * 3 * 4).collect::<Vec<_>>();
             println!("{:?}", &data);
             if data.contains(&&0) {
@@ -105,7 +105,7 @@ async fn test_sort(sorter: &GPUSorter, device: &wgpu::Device, queue: &wgpu::Queu
     });
     upload_to_buffer(
         &mut encoder,
-        &sort_buffers.keys(),
+        sort_buffers.keys(),
         device,
         scrambled_data.as_slice(),
     );
@@ -120,16 +120,16 @@ async fn test_sort(sorter: &GPUSorter, device: &wgpu::Device, queue: &wgpu::Queu
         .unwrap();
 
     let sorted = download_buffer::<f32>(
-        &sort_buffers.keys(),
+        sort_buffers.keys(),
         device,
         queue,
         0..sort_buffers.keys_valid_size(),
     )
     .await;
-    return sorted
+    sorted
         .into_iter()
-        .zip(sorted_data.into_iter())
-        .all(|(a, b)| a == b);
+        .zip(sorted_data)
+        .all(|(a, b)| a == b)
 }
 
 /// Function guesses the best subgroup size by testing the sorter with
@@ -154,5 +154,5 @@ pub async fn guess_workgroup_size(device: &wgpu::Device, queue: &wgpu::Queue) ->
             best = Some(subgroup_size)
         }
     }
-    return best;
+    best
 }

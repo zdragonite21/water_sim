@@ -173,17 +173,17 @@ impl GPUSorter {
             cache: None,
         });
 
-        return Self {
+        Self {
             zero_p,
             histogram_p,
             prefix_p,
             scatter_even_p,
             scatter_odd_p,
-        };
+        }
     }
 
     fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-        return device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("radix sort bind group layout"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
@@ -249,7 +249,7 @@ impl GPUSorter {
                     count: None,
                 },
             ],
-        });
+        })
     }
 
     fn create_keyval_buffers(
@@ -293,7 +293,7 @@ impl GPUSorter {
             usage: wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
         });
-        return (keys, keys_aux, payload, payload_aux);
+        (keys, keys_aux, payload, payload_aux)
     }
 
     // calculates and allocates a buffer that is sufficient for holding all needed information for
@@ -317,13 +317,13 @@ impl GPUSorter {
 
         let internal_size = (RS_KEYVAL_SIZE + scatter_blocks_ru) * histo_size; // +1 safety
 
-        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        
+        device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Internal radix sort buffer"),
             size: internal_size as u64,
             usage: wgpu::BufferUsages::STORAGE,
             mapped_at_creation: false,
-        });
-        return buffer;
+        })
     }
 
     fn general_info_data(length: u32) -> SorterState {
@@ -353,7 +353,7 @@ impl GPUSorter {
             pass.push_debug_group("Water SPH / radix sort / zero histogram");
             pass.set_pipeline(&self.zero_p);
             pass.set_bind_group(0, bind_group, &[]);
-            pass.dispatch_workgroups(hist_blocks_ru as u32, 1, 1);
+            pass.dispatch_workgroups(hist_blocks_ru, 1, 1);
             pass.pop_debug_group();
         }
 
@@ -366,7 +366,7 @@ impl GPUSorter {
             pass.push_debug_group("Water SPH / radix sort / histogram");
             pass.set_pipeline(&self.histogram_p);
             pass.set_bind_group(0, bind_group, &[]);
-            pass.dispatch_workgroups(hist_blocks_ru as u32, 1, 1);
+            pass.dispatch_workgroups(hist_blocks_ru, 1, 1);
             pass.pop_debug_group();
         }
     }
@@ -418,7 +418,7 @@ impl GPUSorter {
         pass.push_debug_group("Water SPH / radix sort / prefix histogram");
         pass.set_pipeline(&self.prefix_p);
         pass.set_bind_group(0, bind_group, &[]);
-        pass.dispatch_workgroups(NUM_PASSES as u32, 1, 1);
+        pass.dispatch_workgroups(NUM_PASSES, 1, 1);
         pass.pop_debug_group();
     }
 
@@ -438,22 +438,22 @@ impl GPUSorter {
         pass.set_bind_group(0, bind_group, &[]);
         pass.push_debug_group("Water SPH / radix sort / scatter even 0");
         pass.set_pipeline(&self.scatter_even_p);
-        pass.dispatch_workgroups(scatter_blocks_ru as u32, 1, 1);
+        pass.dispatch_workgroups(scatter_blocks_ru, 1, 1);
         pass.pop_debug_group();
 
         pass.push_debug_group("Water SPH / radix sort / scatter odd 0");
         pass.set_pipeline(&self.scatter_odd_p);
-        pass.dispatch_workgroups(scatter_blocks_ru as u32, 1, 1);
+        pass.dispatch_workgroups(scatter_blocks_ru, 1, 1);
         pass.pop_debug_group();
 
         pass.push_debug_group("Water SPH / radix sort / scatter even 1");
         pass.set_pipeline(&self.scatter_even_p);
-        pass.dispatch_workgroups(scatter_blocks_ru as u32, 1, 1);
+        pass.dispatch_workgroups(scatter_blocks_ru, 1, 1);
         pass.pop_debug_group();
 
         pass.push_debug_group("Water SPH / radix sort / scatter odd 1");
         pass.set_pipeline(&self.scatter_odd_p);
-        pass.dispatch_workgroups(scatter_blocks_ru as u32, 1, 1);
+        pass.dispatch_workgroups(scatter_blocks_ru, 1, 1);
         pass.pop_debug_group();
     }
 
@@ -543,8 +543,8 @@ impl GPUSorter {
         let length = length.get();
 
         let (keys_a, keys_b, payload_a, payload_b) =
-            GPUSorter::create_keyval_buffers(&device, length);
-        let internal_mem_buffer = self.create_internal_mem_buffer(&device, length);
+            GPUSorter::create_keyval_buffers(device, length);
+        let internal_mem_buffer = self.create_internal_mem_buffer(device, length);
 
         let uniform_infos = Self::general_info_data(length);
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -667,12 +667,12 @@ impl SortBuffers {
 }
 
 fn scatter_blocks_ru(n: u32) -> u32 {
-    (n + SCATTER_BLOCK_KVS - 1) / SCATTER_BLOCK_KVS
+    n.div_ceil(SCATTER_BLOCK_KVS)
 }
 
 /// number of histogram blocks required
 fn histo_blocks_ru(n: u32) -> u32 {
-    (scatter_blocks_ru(n) * SCATTER_BLOCK_KVS + HISTO_BLOCK_KVS - 1) / HISTO_BLOCK_KVS
+    (scatter_blocks_ru(n) * SCATTER_BLOCK_KVS).div_ceil(HISTO_BLOCK_KVS)
 }
 
 /// keys buffer must be multiple of HISTO_BLOCK_KVS
