@@ -12,8 +12,6 @@ pub struct Gui {
     state: egui_winit::State,
     renderer: egui_wgpu::Renderer,
     debug_text: DebugText,
-    #[cfg(target_arch = "wasm32")]
-    controls: ControlsHelp,
 }
 
 impl Gui {
@@ -44,8 +42,6 @@ impl Gui {
             state,
             renderer,
             debug_text: DebugText::new(),
-            #[cfg(target_arch = "wasm32")]
-            controls: ControlsHelp::new(),
         }
     }
 
@@ -65,11 +61,6 @@ impl Gui {
 
     pub fn toggle_debug_text(&mut self) {
         self.debug_text.toggle();
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    pub fn toggle_controls(&mut self) {
-        self.controls.toggle();
     }
 
     pub fn render(
@@ -94,8 +85,6 @@ impl Gui {
             camera_settings.draw(&context);
             scene_config.draw(&context);
             profiler.draw(&context);
-            #[cfg(target_arch = "wasm32")]
-            self.controls.draw(&context);
         });
         self.state
             .handle_platform_output(window, output.platform_output);
@@ -139,97 +128,6 @@ impl Gui {
 
         Ok(())
     }
-
-    #[cfg(target_arch = "wasm32")]
-    pub fn hide_controls(&mut self) -> bool {
-        self.controls.hide()
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-struct ControlsHelp {
-    open: bool,
-}
-
-#[cfg(target_arch = "wasm32")]
-impl ControlsHelp {
-    fn new() -> Self {
-        Self { open: true }
-    }
-
-    fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-
-    fn draw(&mut self, context: &Context) {
-        egui::Area::new(Id::new("Controls Hint"))
-            .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
-            .order(egui::Order::Foreground)
-            .show(context, |ui| {
-                Frame::NONE
-                    .fill(Color32::from_black_alpha(240))
-                    .inner_margin(Margin::symmetric(8, 4))
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.label("Left drag: look   WASD: move   Enter: play / pause");
-                            if ui.button("?  Controls").clicked() {
-                                self.open = true;
-                            }
-                        });
-                    });
-            });
-
-        if !self.open {
-            return;
-        }
-
-        let mut open = self.open;
-        egui::Window::new("Controls")
-            .id(Id::new("Controls Help"))
-            .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
-            .default_width(360.0)
-            .collapsible(false)
-            .resizable(false)
-            .open(&mut open)
-            .show(context, |ui| {
-                ui.label(RichText::new("Hotkeys!").size(16.0).strong());
-                ui.add_space(6.0);
-
-                egui::Grid::new("Controls Grid")
-                    .num_columns(2)
-                    .spacing([18.0, 5.0])
-                    .show(ui, |ui| {
-                        control_row(ui, "Left drag", "Look around");
-                        control_row(ui, "W A S D", "Move");
-                        control_row(ui, "Space / Shift", "Move up / down");
-                        control_row(ui, "Mouse wheel", "Zoom or adjust flight speed");
-                        control_row(ui, "Enter", "Play / pause simulation");
-                        control_row(ui, "Right arrow", "Advance one simulation step");
-                        control_row(ui, "H", "Reset camera view");
-                        control_row(ui, "R", "Reset simulation and apply particle count");
-                        control_row(ui, "F2", "Show simulation statistics");
-                        control_row(ui, "?", "Show or hide these controls");
-                    });
-
-                ui.add_space(6.0);
-                ui.label("Tip: try changing the size of the bounds!");
-            });
-
-        self.open = open;
-    }
-
-    fn hide(&mut self) -> bool {
-        let was_open = self.open;
-        self.open = false;
-        was_open
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-fn control_row(ui: &mut egui::Ui, input: &str, action: &str) {
-    ui.label(RichText::new(input).monospace().strong());
-    ui.label(action);
-    ui.end_row();
 }
 
 fn apply_editor_style(context: &Context) {

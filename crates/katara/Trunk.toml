@@ -1,6 +1,0 @@
-[build]
-dist = "../../dist"
-no_default_features = true
-
-[watch]
-watch = ["src", "res", "index.html"]

@@ -1,5 +1,3 @@
-#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
-
 pub mod app;
 mod camera;
 mod config;
