@@ -1,5 +1,5 @@
-use crate::inspect::{Inspect, inspect_config};
 use crate::gui::Panel;
+use crate::inspect::{Inspect, inspect_config};
 use serde::{Deserialize, Serialize};
 
 inspect_config! {

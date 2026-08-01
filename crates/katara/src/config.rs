@@ -3,8 +3,8 @@ use crate::{
     gui::Panel,
     inspect::{Inspect, inspect_config},
 };
-use serde::{Deserialize, Serialize};
 use anyhow::Context;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

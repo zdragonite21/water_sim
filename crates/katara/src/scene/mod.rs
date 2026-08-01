@@ -16,7 +16,7 @@ pub struct Scene {
     sim: Sim,
     renderer: BillboardRenderer,
     debug_overlay: DebugOverlay,
-    
+
     paused: bool,
     accumulator: instant::Duration,
     fixed_dt: instant::Duration,
@@ -123,10 +123,7 @@ impl Scene {
         &mut self.config
     }
 
-    pub fn sync_config(
-        &mut self,
-        queue: &wgpu::Queue,
-    ) {
+    pub fn sync_config(&mut self, queue: &wgpu::Queue) {
         self.sim.update_config(&self.config.sim);
         self.sim.update_uniforms(queue, self.fixed_dt);
         self.renderer.update_config(&self.config.render);

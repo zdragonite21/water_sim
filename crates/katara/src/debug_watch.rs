@@ -50,11 +50,13 @@ pub fn snapshot() -> Vec<(&'static str, WatchEntry)> {
 pub fn begin_frame(frame: u64, paused: bool) {
     let mut watch = WATCHES.lock().unwrap();
     watch.frame = frame;
-    watch.map.retain(|_, entry| entry.last_seen_frame == frame || paused);
+    watch
+        .map
+        .retain(|_, entry| entry.last_seen_frame == frame || paused);
 }
 
 pub fn clear() {
-    WATCHES.lock().unwrap().map.clear(); 
+    WATCHES.lock().unwrap().map.clear();
 }
 
 #[macro_export]

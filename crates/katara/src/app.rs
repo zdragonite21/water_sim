@@ -46,7 +46,6 @@ impl App {
             }
         }
     }
-
 }
 
 impl ApplicationHandler<State> for App {

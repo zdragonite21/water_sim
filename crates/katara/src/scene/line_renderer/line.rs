@@ -59,7 +59,7 @@ impl LineBatch {
     ) {
         let start = start.into();
         let end = end.into();
-        
+
         if (end - start).magnitude2() <= f32::EPSILON {
             return;
         }
